@@ -192,7 +192,7 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
                 return;
             case ID_ICON:
                 captureInputs();
-                GuiStack.push(new GuiIconPicker(this));
+                GuiStack.push(new GuiIconPicker(this, draft.icon == null ? null : draft.icon.color));
                 return;
             case ID_KEEP_OPEN:
                 draft.keepOpen = !draft.keepOpen;

@@ -44,3 +44,11 @@ radialmenu.rules.useCurrent=Use current world
 radialmenu.rules.type.server=Server
 radialmenu.rules.type.world=World
 radialmenu.rules.type.singleplayer=Singleplayer
+
+radialmenu.icons.items=Items
+radialmenu.icons.sprites=Sprites
+radialmenu.icons.files=My PNGs
+radialmenu.icons.noMatches=Nothing matches that search
+radialmenu.icons.noFiles=Drop PNG files into RadialMenu/icons, then press R
+
+radialmenu.color.title=Pick a colour
