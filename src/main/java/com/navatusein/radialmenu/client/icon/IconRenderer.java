@@ -4,11 +4,12 @@ import java.util.HashMap;
 import java.util.Map;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.Gui;
 import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.ResourceLocation;
 
 import org.lwjgl.opengl.GL11;
 
@@ -33,6 +34,10 @@ public final class IconRenderer {
 
     /** Draws a 16x16 icon with its top-left corner at the given position. */
     public static void draw(IconSpec icon, int x, int y) {
+        draw(icon, x, y, ICON_SIZE);
+    }
+
+    public static void draw(IconSpec icon, int x, int y, int size) {
         if (icon == null || icon.id == null) {
             return;
         }
@@ -41,10 +46,10 @@ public final class IconRenderer {
                 drawItem(icon, x, y);
                 break;
             case SPRITE:
+                drawSprite(icon, x, y, size);
+                break;
             case FILE:
-                // The bundled atlas and user PNGs are not wired up yet; a tinted marker keeps the slot readable
-                // instead of silently rendering nothing.
-                drawPlaceholder(icon, x, y);
+                drawFile(icon, x, y, size);
                 break;
             default:
                 break;
@@ -67,9 +72,61 @@ public final class IconRenderer {
         GL11.glPopMatrix();
     }
 
-    private static void drawPlaceholder(IconSpec icon, int x, int y) {
-        int rgb = icon.rgbOrWhite();
-        Gui.drawRect(x + 3, y + 3, x + ICON_SIZE - 3, y + ICON_SIZE - 3, 0xFF000000 | rgb);
+    private static void drawSprite(IconSpec icon, int x, int y, int size) {
+        SpriteAtlas.Sprite sprite = SpriteAtlas.find(icon.id);
+        if (sprite == null) {
+            return;
+        }
+        Minecraft.getMinecraft()
+            .getTextureManager()
+            .bindTexture(SpriteAtlas.TEXTURE);
+
+        drawTexturedQuad(
+            x,
+            y,
+            size,
+            icon.rgbOrWhite(),
+            SpriteAtlas.minU(sprite),
+            SpriteAtlas.minV(sprite),
+            SpriteAtlas.maxU(sprite),
+            SpriteAtlas.maxV(sprite));
+    }
+
+    private static void drawFile(IconSpec icon, int x, int y, int size) {
+        ResourceLocation texture = UserIconLoader.texture(icon.id);
+        if (texture == null) {
+            return;
+        }
+        Minecraft.getMinecraft()
+            .getTextureManager()
+            .bindTexture(texture);
+
+        drawTexturedQuad(x, y, size, icon.rgbOrWhite(), 0f, 0f, 1f, 1f);
+    }
+
+    /**
+     * Draws one tinted, textured quad.
+     *
+     * <p>
+     * Explicit texture coordinates rather than {@code Gui.drawTexturedModalRect}, which assumes a 256x256 sheet - the
+     * sprite atlas is 2048x1024, and user icons are whatever size the player saved.
+     */
+    private static void drawTexturedQuad(int x, int y, int size, int rgb, float minU, float minV, float maxU,
+        float maxV) {
+        GL11.glEnable(GL11.GL_BLEND);
+        GL11.glBlendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+        GL11.glColor4f(((rgb >> 16) & 0xFF) / 255.0F, ((rgb >> 8) & 0xFF) / 255.0F, (rgb & 0xFF) / 255.0F, 1.0F);
+
+        Tessellator tessellator = Tessellator.instance;
+        tessellator.startDrawingQuads();
+        tessellator.addVertexWithUV(x, y + size, 0.0, minU, maxV);
+        tessellator.addVertexWithUV(x + size, y + size, 0.0, maxU, maxV);
+        tessellator.addVertexWithUV(x + size, y, 0.0, maxU, minV);
+        tessellator.addVertexWithUV(x, y, 0.0, minU, minV);
+        tessellator.draw();
+
+        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+        GL11.glDisable(GL11.GL_BLEND);
     }
 
     private static ItemStack resolveItem(IconSpec icon) {
@@ -90,5 +147,6 @@ public final class IconRenderer {
     /** Drops cached lookups, for when the editor wants a freshly typed registry name re-resolved. */
     public static void clearCache() {
         ITEM_CACHE.clear();
+        UserIconLoader.refresh();
     }
 }
