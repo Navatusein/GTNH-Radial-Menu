@@ -8,6 +8,8 @@ import net.minecraft.command.ICommandSender;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
 
+import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.editor.GuiProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileStorage;
 
@@ -27,7 +29,7 @@ public class CommandRadialMenu extends CommandBase {
 
     @Override
     public String getCommandUsage(ICommandSender sender) {
-        return "/radialmenu <profile|profiles|reload>";
+        return "/radialmenu <edit|profile|profiles|reload>";
     }
 
     @Override
@@ -49,6 +51,12 @@ public class CommandRadialMenu extends CommandBase {
         }
 
         String sub = args[0].toLowerCase();
+
+        if ("edit".equals(sub)) {
+            // Deferred by a tick: opening a screen from here would be undone by the chat screen closing afterwards.
+            GuiStack.requestOpen(new GuiProfileManager());
+            return;
+        }
 
         if ("profiles".equals(sub)) {
             List<String> names = ProfileStorage.listProfileNames();
@@ -83,7 +91,7 @@ public class CommandRadialMenu extends CommandBase {
     @Override
     public List<String> addTabCompletionOptions(ICommandSender sender, String[] args) {
         if (args.length == 1) {
-            return getListOfStringsMatchingLastWord(args, "profile", "profiles", "reload");
+            return getListOfStringsMatchingLastWord(args, "edit", "profile", "profiles", "reload");
         }
         if (args.length == 2 && "profile".equalsIgnoreCase(args[0])) {
             List<String> names = ProfileStorage.listProfileNames();

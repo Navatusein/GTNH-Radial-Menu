@@ -54,6 +54,12 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
     private final List<ActionField> editableFields = new ArrayList<>();
     private final List<GuiTextField> fieldInputs = new ArrayList<>();
 
+    /**
+     * Control rebuilds wait for the next frame: GuiScreen.mouseClicked iterates buttonList by index and calls
+     * actionPerformed from inside that loop, so replacing the list mid-click makes it walk the new buttons too.
+     */
+    private boolean rebuildPending;
+
     public GuiSlotEditor(MenuNode parent, int slotIndex) {
         this.parent = parent;
         this.slotIndex = slotIndex;
@@ -185,6 +191,7 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
                 deleteEntry();
                 return;
             case ID_ICON:
+                captureInputs();
                 GuiStack.push(new GuiIconPicker(this));
                 return;
             case ID_KEEP_OPEN:
@@ -192,9 +199,11 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
                 button.displayString = keepOpenLabel();
                 return;
             case ID_MAKE_CATEGORY:
+                captureInputs();
                 toggleCategory();
                 return;
             case ID_TYPE:
+                captureInputs();
                 cycleActionType();
                 return;
             default:
@@ -212,6 +221,7 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
 
         switch (field.kind) {
             case KEYBIND_REF:
+                captureInputs();
                 GuiStack.push(new GuiKeyBindPicker(this));
                 return;
             case BOOLEAN:
@@ -252,7 +262,7 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
         }
         draft.action = types.get((index + 1) % types.size())
             .newSpec();
-        rebuildControls(this.width / 2 - 150, 34);
+        rebuildPending = true;
     }
 
     private void toggleCategory() {
@@ -267,20 +277,31 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
             draft.children = new ArrayList<>();
             draft.ensureSlotCapacity();
         }
-        rebuildControls(this.width / 2 - 150, 34);
+        rebuildPending = true;
     }
 
-    private void save() {
-        draft.title = titleField.getText()
-            .trim();
-
-        for (int i = 0; i < editableFields.size(); i++) {
+    /**
+     * Copies what is typed in the text boxes into the draft.
+     *
+     * <p>
+     * Called before opening a picker as well as on save, because returning from a picker re-runs initGui and rebuilds
+     * the boxes from the draft - anything typed but not captured would be silently reverted.
+     */
+    private void captureInputs() {
+        if (titleField != null) {
+            draft.title = titleField.getText()
+                .trim();
+        }
+        for (int i = 0; i < editableFields.size() && i < fieldInputs.size(); i++) {
             GuiTextField input = fieldInputs.get(i);
-            if (input != null) {
+            if (input != null && draft.action != null) {
                 draft.action.set(editableFields.get(i).key, input.getText());
             }
         }
+    }
 
+    private void save() {
+        captureInputs();
         draft.normalize();
         setChild(draft);
         persist();
@@ -307,17 +328,22 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
     public void onKeyBindPicked(String description, String category) {
         draft.action.set(ActionTypes.PARAM_BINDING, description);
         draft.action.set(ActionTypes.PARAM_CATEGORY, category == null ? "" : category);
-        rebuildControls(this.width / 2 - 150, 34);
+        rebuildPending = true;
     }
 
     @Override
     public void onIconPicked(IconSpec icon) {
         draft.icon = icon;
-        rebuildControls(this.width / 2 - 150, 34);
+        rebuildPending = true;
     }
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        if (rebuildPending) {
+            rebuildPending = false;
+            rebuildControls(this.width / 2 - 150, 34);
+        }
+
         this.drawDefaultBackground();
         this.drawCenteredString(
             this.fontRendererObj,

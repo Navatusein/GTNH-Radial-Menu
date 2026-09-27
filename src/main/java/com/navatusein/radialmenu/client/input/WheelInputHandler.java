@@ -5,6 +5,7 @@ import net.minecraft.client.multiplayer.ServerData;
 
 import com.navatusein.radialmenu.client.action.ActionExecutors;
 import com.navatusein.radialmenu.client.gui.GuiRadialWheel;
+import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -50,6 +51,7 @@ public class WheelInputHandler {
 
         KeybindStateTracker.onClientTick();
         ActionExecutors.runPending();
+        GuiStack.openRequested();
 
         if (WheelKeyBindings.cycleProfile.isPressed()) {
             ProfileManager.cycle(1);
