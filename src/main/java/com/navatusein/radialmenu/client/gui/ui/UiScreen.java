@@ -114,7 +114,9 @@ public abstract class UiScreen extends GuiScreen {
         if (hint > 0) {
             // A dialog is centred on the screen and carries its buttons directly beneath it. Pinning a short panel to
             // the screen-bottom bar instead left it stranded low with a lot of empty box above the text.
-            int panelHeight = Ui.PAD + TITLE_BAND + hint + Ui.PAD;
+            // The gap is the one the content keeps inside the frame; without it a dialog sized to exactly fit its
+            // own content came out a gap short, and its last row fell outside.
+            int panelHeight = Ui.PAD + TITLE_BAND + hint + Ui.GAP + Ui.PAD;
             int total = panelHeight + Ui.GAP + Ui.ROW;
             panelTop = Math.max(Ui.PAD * 2, (this.height - total) / 2);
             panelBottom = panelTop + panelHeight;
@@ -145,14 +147,32 @@ public abstract class UiScreen extends GuiScreen {
     }
 
     /**
-     * First row of content inside the panel, below the title band.
+     * Top edge of the framed box, below the title band.
      *
      * <p>
      * The band has to be tall enough for the title, a rule under it and a gap: with only four pixels to spare, a row
      * clipped at the top of the scrolling area read as running into the title.
      */
+    protected int viewportTop() {
+        return panelTop + Ui.PAD + TITLE_BAND - Ui.GAP;
+    }
+
+    /**
+     * Bottom edge of the framed box, above whatever the screen pinned below it.
+     *
+     * <p>
+     * At the panel's padding, like the left and right edges. Derived from {@code contentBottom} instead, it came out
+     * four pixels from the bottom border against eight at the sides - the frame visibly closer to one edge than the
+     * others.
+     */
+    protected int viewportBottom() {
+        int footer = footerHeight();
+        return panelBottom - Ui.PAD - (footer > 0 ? footer + Ui.GAP : 0);
+    }
+
+    /** First row of content, a gap inside the frame. */
     protected int contentTop() {
-        return panelTop + Ui.PAD + TITLE_BAND;
+        return viewportTop() + Ui.GAP;
     }
 
     /** Where content actually starts drawing, once scrolling is taken into account. */
@@ -197,16 +217,14 @@ public abstract class UiScreen extends GuiScreen {
     }
 
     /**
-     * Bottom edge of the scrolling area.
+     * Bottom edge of the scrolling area, a gap inside the frame.
      *
      * <p>
-     * Kept clear of the footer by a gap on each side of the viewport frame. Reserving only the footer's own height
-     * left four pixels between a clipped row and the buttons, and put the frame's bottom edge underneath them - so
-     * the cut looked like the row colliding with the footer rather than ending at a boundary.
+     * The gap is what keeps a clipped row from reading as a collision: reserving only the footer's own height left
+     * four pixels between a cut row and the buttons, and put the frame's bottom edge underneath them.
      */
     protected int contentBottom() {
-        int footer = footerHeight();
-        return panelBottom - Ui.PAD - (footer > 0 ? footer + Ui.GAP * 2 : 0);
+        return viewportBottom() - Ui.GAP;
     }
 
     protected int viewportHeight() {
@@ -229,12 +247,35 @@ public abstract class UiScreen extends GuiScreen {
         return y + Ui.ROW > contentTop() && y < contentBottom();
     }
 
-    protected int contentLeft() {
+    /**
+     * Edges of a framed box inside the panel - the scrolling viewport, or a list a screen frames itself.
+     *
+     * <p>
+     * One definition, because there were two: the viewport framed itself a gap out from the panel border while the
+     * icon grid framed itself at the content column, so two screens showed visibly different padding for the same
+     * thing. A frame sits at the panel's padding, like the rule under the title.
+     */
+    protected int viewportLeft() {
         return panelLeft + Ui.PAD;
     }
 
-    protected int contentRight() {
+    protected int viewportRight() {
         return panelRight - Ui.PAD;
+    }
+
+    /**
+     * Where a row starts.
+     *
+     * <p>
+     * Indented by a gap when there is a frame around it, matching the gap the frame leaves above and below the
+     * content, so a row is never pressed against a border it sits inside.
+     */
+    protected int contentLeft() {
+        return viewportLeft() + (framedViewport() ? Ui.GAP : 0);
+    }
+
+    protected int contentRight() {
+        return viewportRight() - (framedViewport() ? Ui.GAP : 0);
     }
 
     protected int contentWidth() {
@@ -295,24 +336,25 @@ public abstract class UiScreen extends GuiScreen {
             panelTop + Ui.PAD - 2,
             Ui.TEXT);
 
-        // A rule under the title, so the edge of the scrolling area is unmistakably below it.
-        Gui.drawRect(
-            panelLeft + Ui.PAD,
-            panelTop + Ui.PAD + 12,
-            panelRight - Ui.PAD,
-            panelTop + Ui.PAD + 13,
-            0x40FFFFFF);
+        // A rule under the title, so the edge of the scrolling area is unmistakably below it. Drawn to the same
+        // edges as a frame, so the two line up on a screen that has both.
+        Gui.drawRect(viewportLeft(), panelTop + Ui.PAD + 12, viewportRight(), panelTop + Ui.PAD + 13, 0x40FFFFFF);
 
         if (framedViewport()) {
-            Ui.list(panelLeft + Ui.GAP, contentTop() - Ui.GAP, panelRight - Ui.GAP, contentBottom() + Ui.GAP);
+            Ui.list(viewportLeft(), viewportTop(), viewportRight(), viewportBottom());
         }
 
         // Buttons are drawn here rather than by super, because the scrolling ones belong inside the clip and the
         // button bar and footer must stay outside it.
-        beginClip();
+        boolean clipped = framedViewport();
+        if (clipped) {
+            beginClip();
+        }
         drawContent(mouseX, mouseY, partialTicks);
         drawButtons(mouseX, mouseY, true);
-        endClip();
+        if (clipped) {
+            endClip();
+        }
 
         drawButtons(mouseX, mouseY, false);
         drawOverlay(mouseX, mouseY, partialTicks);
@@ -343,6 +385,11 @@ public abstract class UiScreen extends GuiScreen {
 
     /**
      * Clips drawing to the scrolling area.
+     *
+     * <p>
+     * Only for a screen with a framed viewport: the clip is what keeps a scrolling row from spilling past the frame,
+     * and a screen without one has nothing to clip against. Applied to those anyway, it cut the top and bottom edges
+     * off the boxes they frame themselves - the profile list drew without a bottom border and so looked bottomless.
      *
      * <p>
      * {@code glScissor} works in real window pixels measured from the bottom-left, while everything here is in

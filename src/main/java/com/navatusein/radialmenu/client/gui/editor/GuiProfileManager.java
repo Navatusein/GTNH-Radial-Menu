@@ -58,6 +58,12 @@ public class GuiProfileManager extends UiScreen {
         return 360;
     }
 
+    /** A line for the error, reserved only while there is one - the list is worth more than a permanent blank. */
+    @Override
+    protected int footerHeight() {
+        return errorKey == null ? 0 : 10;
+    }
+
     @Override
     protected void buildControls() {
         profiles.clear();
@@ -66,12 +72,15 @@ public class GuiProfileManager extends UiScreen {
             selected = ProfileManager.activeName();
         }
 
-        int listRight = contentRight() - BUTTON_COLUMN - Ui.GAP;
-        list = new UiList(contentLeft(), contentTop(), listRight, panelBottom - Ui.PAD, 13);
+        // The list and the column of actions are siblings, so both take the frame's edges rather than the content
+        // column's. Measured from contentTop the box started four pixels below every other screen's frame while its
+        // bottom matched, which reads as the whole list having slipped down.
+        int listRight = viewportRight() - BUTTON_COLUMN - Ui.GAP;
+        list = new UiList(viewportLeft(), viewportTop(), listRight, viewportBottom(), 13);
         list.scrollTo(listScroll, profiles.size());
 
         int x = listRight + Ui.GAP;
-        int y = contentTop();
+        int y = viewportTop();
         boolean has = profiles.contains(selected);
         boolean isActive = has && selected.equals(ProfileManager.activeName());
 
@@ -228,11 +237,13 @@ public class GuiProfileManager extends UiScreen {
         }
 
         if (errorKey != null) {
+            // Below the frame rather than over it: at a fixed offset from the panel bottom it landed on the list's
+            // own border.
             this.drawCenteredString(
                 this.fontRendererObj,
                 EnumChatFormatting.RED + I18n.format(errorKey),
                 this.width / 2,
-                panelBottom - 12,
+                viewportBottom() + Ui.GAP,
                 Ui.TEXT);
         }
     }

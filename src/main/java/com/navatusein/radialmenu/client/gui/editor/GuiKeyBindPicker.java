@@ -87,7 +87,8 @@ public class GuiKeyBindPicker extends UiScreen {
         searchField.setCursorPositionEnd();
         searchField.setFocused(true);
 
-        list = new UiList(contentLeft(), contentTop() + Ui.STEP, contentRight(), panelBottom - Ui.PAD, 12);
+        // The search sits above the frame; the frame itself takes the shared edges like every other box.
+        list = new UiList(viewportLeft(), contentTop() + Ui.STEP, viewportRight(), viewportBottom(), 12);
         rebuildRows();
         list.scrollTo(listScroll, rows.size());
 
