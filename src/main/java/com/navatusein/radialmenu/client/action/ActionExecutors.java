@@ -39,14 +39,22 @@ public final class ActionExecutors {
         }
     }
 
-    /** Runs everything queued since the previous tick. */
+    /** Runs everything queued since the previous tick, then ages anything scheduled for later. */
     public static void runPending() {
         while (!PENDING.isEmpty()) {
-            run(PENDING.poll());
+            runNow(PENDING.poll());
         }
+        DelayedActions.onClientTick();
     }
 
-    private static void run(ActionSpec spec) {
+    /**
+     * Runs an action immediately.
+     *
+     * <p>
+     * Only for callers that are already on the client tick with the wheel closed - chains and delayed command lines.
+     * Everything triggered from the wheel itself goes through {@link #enqueue} instead.
+     */
+    public static void runNow(ActionSpec spec) {
         IActionExecutor executor = get(spec.type);
         if (executor == null) {
             RadialMenuMod.LOG.warn("No executor registered for action type '" + spec.type + "'");

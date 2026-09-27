@@ -21,14 +21,20 @@ public final class ActionTypes {
     /** Switch the active profile. */
     public static final String PROFILE_SWITCH = "profileSwitch";
 
-    /** Run the nested steps in order. Registered from phase 2 onwards. */
+    /** Run the nested steps in order. */
     public static final String SEQUENCE = "sequence";
+
+    /** Send one or more chat lines or slash commands. */
+    public static final String COMMAND = "command";
 
     public static final String PARAM_BINDING = "binding";
     public static final String PARAM_CATEGORY = "category";
     public static final String PARAM_MODE = "mode";
     public static final String PARAM_HOLD_TICKS = "holdTicks";
     public static final String PARAM_PROFILE = "profile";
+    public static final String PARAM_COMMAND = "command";
+    public static final String PARAM_DELAY_TICKS = "delayTicks";
+    public static final String PARAM_CYCLE = "cycle";
 
     private static final Map<String, ActionType> TYPES = new LinkedHashMap<>();
 
@@ -54,7 +60,7 @@ public final class ActionTypes {
         TYPES.clear();
     }
 
-    /** The types available in phase 1. Command and inventory actions register themselves in later phases. */
+    /** Everything the editor offers today. Inventory and backpack actions arrive in later phases. */
     public static void registerDefaults() {
         register(
             new ActionType(
@@ -72,5 +78,21 @@ public final class ActionTypes {
                 "radialmenu.action.profileSwitch",
                 false,
                 ActionField.profileRef(PARAM_PROFILE, "radialmenu.action.profileSwitch.profile")));
+
+        register(
+            new ActionType(
+                COMMAND,
+                "radialmenu.action.command",
+                false,
+                ActionField.multiline(PARAM_COMMAND, "radialmenu.action.command.text", ""),
+                ActionField.integer(PARAM_DELAY_TICKS, "radialmenu.action.command.delayTicks", 0),
+                ActionField.bool(PARAM_CYCLE, "radialmenu.action.command.cycle", false)));
+
+        register(
+            new ActionType(
+                SEQUENCE,
+                "radialmenu.action.sequence",
+                true,
+                ActionField.integer(PARAM_DELAY_TICKS, "radialmenu.action.sequence.delayTicks", 0)));
     }
 }

@@ -26,6 +26,15 @@ public class ActionSpec {
     /** Nested actions, used by chain-style action types. */
     public List<ActionSpec> steps;
 
+    /**
+     * Which line a cycling command action will send next.
+     *
+     * <p>
+     * Transient on purpose: it is where the player is in the cycle right now, not part of the configuration, and
+     * persisting it would rewrite the profile file on every activation.
+     */
+    public transient int cycleCursor;
+
     public ActionSpec() {}
 
     public ActionSpec(String type) {
