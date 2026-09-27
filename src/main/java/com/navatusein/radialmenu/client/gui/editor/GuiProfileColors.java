@@ -57,7 +57,7 @@ public class GuiProfileColors extends UiScreen {
 
     @Override
     protected int panelHeightHint() {
-        return Ui.PAD + 14 + Ui.STEP * 4 + Ui.PAD;
+        return 14 + Ui.STEP * 3 + Ui.ROW;
     }
 
     @Override

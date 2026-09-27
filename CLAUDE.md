@@ -123,8 +123,18 @@ Other traps the same code has already fallen into:
   placeholder size and resized afterwards, it renders blank until clicked. Build it at its real size.
 - Rows scrolled out of the panel must stop being drawn *and* clickable. Screens with variable-length lists build only
   the rows that fit, so buttons and fields cannot disagree about where the edge is.
-- Scrolling moves a whole row at a time, so a panel whose height is not a multiple of the row step keeps a remainder
-  that migrates between top and bottom. `snapPanelToRows()` trims the panel instead.
+- Scrolling is pixel-smooth, clipped with `glScissor` — which works in real window pixels from the bottom-left while
+  everything else is in scaled GUI pixels from the top-left, so both axes are converted through `ScaledResolution`.
+- **What scrolls is declared, not inferred.** `addBottomBar` and `markFooter` name the chrome; everything else is
+  content. Deciding it by id — anything below `ID_PRIMARY` — silently exempted every screen numbering its rows from a
+  high base (`ID_TYPE_BASE = 100`, `ID_UP_BASE = 200`), so those buttons drew outside the clip and over the title
+  while their own text fields were cut at it. The same reasoning killed the earlier position-based footer test.
+- `panelHeightHint()` is the height of the **content**; `UiScreen` adds the title band and padding. When each dialog
+  did that arithmetic itself, all four picked a different constant and every one of them broke the day the band grew
+  from 14 to 24 — `GuiProfileColors` lost its reset button off the bottom edge without a trace.
+- When a fix aimed at a screenshot misses twice, print the actual numbers. Three rounds went into a `glScissor` rect
+  that turned out to be arithmetically correct; one diagnostic line showed the real defect was four pixels of
+  clearance above the footer.
 
 ## Icons and colours
 
@@ -173,5 +183,4 @@ wheel rendering and lifecycle, keybind action (tap/toggle/hold), profile-switch 
 placeholders, action chains, submenu-as-action-type with per-menu layout and colours, entry reordering, the full
 editor, and `/radialmenu`.
 
-Not built yet: inventory moves, backpack integration, mob-effect icons, pixel-smooth scrolling (it steps a row at a
-time; smooth needs `glScissor` clipping in `UiScreen`).
+Not built yet: inventory moves, backpack integration, mob-effect icons.

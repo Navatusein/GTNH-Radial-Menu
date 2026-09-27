@@ -66,7 +66,7 @@ public class GuiTextPrompt extends UiScreen {
 
     @Override
     protected int panelHeightHint() {
-        return 96;
+        return Ui.GAP + Ui.STEP * 2;
     }
 
     private void confirm() {
