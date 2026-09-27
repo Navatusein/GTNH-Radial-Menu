@@ -78,22 +78,19 @@ public class IconSpec {
         return parseRgb(color, 0xFFFFFF);
     }
 
+    /**
+     * Reads a colour for tinting, ignoring any alpha channel.
+     *
+     * <p>
+     * The colour picker writes eight digits so ring colours can carry opacity; an icon tint has no use for it and
+     * would otherwise read the alpha byte as part of the red channel.
+     */
     public static int parseRgb(String hex, int fallback) {
-        if (hex == null) {
+        if (hex == null || hex.trim()
+            .isEmpty()) {
             return fallback;
         }
-        String cleaned = hex.trim();
-        if (cleaned.startsWith("#")) {
-            cleaned = cleaned.substring(1);
-        }
-        if (cleaned.length() != 6) {
-            return fallback;
-        }
-        try {
-            return Integer.parseInt(cleaned, 16);
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
+        return com.navatusein.radialmenu.core.Colors.parseArgb(hex, fallback) & 0x00FFFFFF;
     }
 
     public void normalize() {

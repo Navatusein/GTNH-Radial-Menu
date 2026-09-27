@@ -2,14 +2,20 @@ package com.navatusein.radialmenu.client.gui;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.resources.I18n;
+import net.minecraft.util.EnumChatFormatting;
 
 import org.lwjgl.opengl.GL11;
 
 import com.navatusein.radialmenu.client.icon.IconRenderer;
+import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.config.RadialMenuConfig;
+import com.navatusein.radialmenu.core.Colors;
 import com.navatusein.radialmenu.core.geometry.RadialGeometry;
 import com.navatusein.radialmenu.core.model.MenuNode;
+import com.navatusein.radialmenu.core.model.MenuStyle;
 
 /**
  * Draws the ring.
@@ -24,16 +30,35 @@ public final class WheelRenderer {
 
     private WheelRenderer() {}
 
-    public static void drawWheel(MenuNode menu, int centerX, int centerY, int hoveredSlot) {
-        int slotCount = menu.slotCount();
+    public static void drawWheel(MenuNode menu, int slotCount, int centerX, int centerY, int hoveredSlot,
+        boolean editMode) {
         if (slotCount <= 0) {
             return;
         }
 
         int outer = RadialMenuConfig.outerRadius;
         int inner = RadialMenuConfig.effectiveInnerRadius();
-        int ringColor = parseArgb(RadialMenuConfig.ringColor, 0x99101010);
-        int highlightColor = parseArgb(RadialMenuConfig.highlightColor, 0xCC4A90D9);
+
+        // A menu may override the global colours, so one submenu can read differently from another. An override
+        // from the colour picker carries no alpha, so it takes the transparency of the value it replaces - read as
+        // an eight-digit colour it would be fully transparent, and the ring would simply vanish.
+        MenuStyle style = menu.style;
+        // Colours inherit down a chain: this menu, then the profile, then the mod's config, which holds the defaults.
+        MenuStyle profileStyle = ProfileManager.active().style;
+
+        int ringColor = Colors.parseArgb(RadialMenuConfig.ringColor, 0x99101010);
+        ringColor = Colors.over(profileStyle == null ? null : profileStyle.ringColor, ringColor);
+        ringColor = Colors.over(style == null ? null : style.ringColor, ringColor);
+
+        int highlightColor = Colors.parseArgb(RadialMenuConfig.highlightColor, 0xCC4A90D9);
+        highlightColor = Colors.over(profileStyle == null ? null : profileStyle.highlightColor, highlightColor);
+        highlightColor = Colors.over(style == null ? null : style.highlightColor, highlightColor);
+
+        if (editMode) {
+            // Unmistakably a different mode: the ring takes on the edit tint rather than relying on a label alone.
+            ringColor = blend(ringColor, 0xFFAA00, 0.25F);
+            highlightColor = blend(highlightColor, 0xFFAA00, 0.45F);
+        }
 
         // Mirrors the state vanilla's Gui.drawRect sets up. Cull face and alpha test are switched off explicitly
         // because arc geometry has no guaranteed winding, and leaving either on makes the ring silently invisible
@@ -121,9 +146,10 @@ public final class WheelRenderer {
         }
     }
 
+    /** Only the hovered entry's name. The profile and the path live in the header, out of the way of the ring. */
     private static void drawLabel(MenuNode menu, int centerX, int centerY, int hoveredSlot) {
         MenuNode hovered = menu.childAt(hoveredSlot);
-        String text = hovered == null ? menu.title : hovered.title;
+        String text = hovered == null ? null : hovered.title;
         if (text == null || text.isEmpty()) {
             return;
         }
@@ -135,26 +161,69 @@ public final class WheelRenderer {
             0xFFFFFFFF);
     }
 
+    /**
+     * Draws the profile name and the path into the current submenu across the top of the screen.
+     *
+     * <p>
+     * These used to sit in the middle of the ring, where they competed with the hovered entry's name and moved the
+     * one thing the player is actually reading while aiming.
+     */
+    public static void drawHeader(int screenWidth, String profileName, String breadcrumb, boolean editMode) {
+        FontRenderer font = Minecraft.getMinecraft().fontRenderer;
+
+        String left = EnumChatFormatting.GRAY + profileName;
+        String path = breadcrumb == null || breadcrumb.isEmpty() ? "" : EnumChatFormatting.WHITE + breadcrumb;
+
+        StringBuilder line = new StringBuilder(left);
+        if (!path.isEmpty()) {
+            line.append(EnumChatFormatting.DARK_GRAY)
+                .append("  >  ")
+                .append(path);
+        }
+        if (editMode) {
+            line.append("   ")
+                .append(EnumChatFormatting.GOLD)
+                .append(EnumChatFormatting.BOLD)
+                .append(I18n.format("radialmenu.wheel.editing"));
+        }
+
+        String text = line.toString();
+        int width = font.getStringWidth(text);
+        int x = screenWidth / 2 - width / 2;
+
+        Gui.drawRect(x - 6, 4, x + width + 6, 20, 0x80000000);
+        font.drawStringWithShadow(text, x, 8, 0xFFFFFFFF);
+    }
+
+    /**
+     * While editing, says what the middle of the wheel does.
+     *
+     * <p>
+     * The dead zone is otherwise dead space, which makes it the natural home for the menu's own settings - and the
+     * only place the root menu could be reached from at all.
+     */
+    public static void drawCenterHint(int centerX, int centerY) {
+        FontRenderer font = Minecraft.getMinecraft().fontRenderer;
+        String text = I18n.format("radialmenu.wheel.menuSettings");
+        font.drawStringWithShadow(
+            text,
+            centerX - font.getStringWidth(text) / 2,
+            centerY - font.FONT_HEIGHT / 2,
+            0xFFFFAA00);
+    }
+
+    /** Mixes an RGB tint into an ARGB colour, keeping its alpha. */
+    private static int blend(int argb, int rgb, float amount) {
+        int alpha = argb >>> 24;
+        int r = Math.round(((argb >> 16) & 0xFF) * (1 - amount) + ((rgb >> 16) & 0xFF) * amount);
+        int g = Math.round(((argb >> 8) & 0xFF) * (1 - amount) + ((rgb >> 8) & 0xFF) * amount);
+        int b = Math.round((argb & 0xFF) * (1 - amount) + (rgb & 0xFF) * amount);
+        return (alpha << 24) | (r << 16) | (g << 8) | b;
+    }
+
     private static int fade(int argb, float factor) {
         int alpha = (int) (((argb >>> 24) & 0xFF) * factor);
         return (alpha << 24) | (argb & 0xFFFFFF);
     }
 
-    /** Accepts {@code 0xAARRGGBB} as written in the config, falling back when a hand edit goes wrong. */
-    public static int parseArgb(String value, int fallback) {
-        if (value == null) {
-            return fallback;
-        }
-        String cleaned = value.trim();
-        if (cleaned.startsWith("0x") || cleaned.startsWith("0X")) {
-            cleaned = cleaned.substring(2);
-        } else if (cleaned.startsWith("#")) {
-            cleaned = cleaned.substring(1);
-        }
-        try {
-            return (int) Long.parseLong(cleaned, 16);
-        } catch (NumberFormatException ignored) {
-            return fallback;
-        }
-    }
 }

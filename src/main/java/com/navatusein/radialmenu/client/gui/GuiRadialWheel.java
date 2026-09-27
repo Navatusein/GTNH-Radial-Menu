@@ -9,12 +9,14 @@ import net.minecraft.client.gui.GuiScreen;
 import org.lwjgl.input.Mouse;
 
 import com.navatusein.radialmenu.client.action.ActionExecutors;
+import com.navatusein.radialmenu.client.gui.editor.GuiMenuSettings;
 import com.navatusein.radialmenu.client.gui.editor.GuiSlotEditor;
 import com.navatusein.radialmenu.client.input.HeldKeyResync;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.config.RadialMenuConfig;
 import com.navatusein.radialmenu.core.geometry.RadialGeometry;
 import com.navatusein.radialmenu.core.model.MenuNode;
+import com.navatusein.radialmenu.core.model.SlotLayout;
 
 /**
  * The wheel itself.
@@ -76,25 +78,73 @@ public class GuiRadialWheel extends GuiScreen {
         int centerX = this.width / 2;
         int centerY = this.height / 2;
 
-        hoveredSlot = RadialGeometry.slotAtPoint(
-            centerX,
-            centerY,
-            mouseX,
-            mouseY,
-            menu.slotCount(),
-            0.0,
-            RadialMenuConfig.effectiveInnerRadius());
+        // Reading the modifier per frame costs nothing - it is a cached keyboard state, not a poll.
+        boolean editMode = isEditModifierDown();
+        int slotCount = sectorCount(menu, editMode);
 
-        WheelRenderer.drawWheel(menu, centerX, centerY, hoveredSlot);
+        hoveredSlot = RadialGeometry
+            .slotAtPoint(centerX, centerY, mouseX, mouseY, slotCount, 0.0, RadialMenuConfig.effectiveInnerRadius());
+
+        WheelRenderer.drawWheel(menu, slotCount, centerX, centerY, hoveredSlot, editMode);
+        WheelRenderer.drawHeader(this.width, ProfileManager.activeName(), breadcrumb(), editMode);
+        // Only while the cursor is actually in the dead zone: elsewhere the centre belongs to the hovered entry's
+        // name, and the two were drawing on top of each other.
+        if (editMode && hoveredSlot == RadialGeometry.NO_SLOT) {
+            WheelRenderer.drawCenterHint(centerX, centerY);
+        }
         super.drawScreen(mouseX, mouseY, partialTicks);
+    }
+
+    /**
+     * Sectors to draw.
+     *
+     * <p>
+     * A dynamic wheel gains one empty sector while editing, because every sector it has is already occupied and
+     * there would otherwise be nowhere to click to add an entry.
+     */
+    private int sectorCount(MenuNode menu, boolean editMode) {
+        int count = menu.slotCount();
+        if (editMode && menu.layoutOrDefault().mode == SlotLayout.Mode.DYNAMIC) {
+            count++;
+        }
+        return count;
+    }
+
+    /** Shift, unless the player configured right-click for editing instead. */
+    private boolean isEditModifierDown() {
+        return !RadialMenuConfig.rightClickToEdit && isShiftKeyDown();
+    }
+
+    /** Path from the root menu to the one on screen, for the header. */
+    private String breadcrumb() {
+        StringBuilder builder = new StringBuilder();
+        MenuNode[] nodes = path.toArray(new MenuNode[0]);
+        // The deque has the current menu first, so walk it backwards to read root-to-here.
+        for (int i = nodes.length - 1; i >= 0; i--) {
+            String title = nodes[i].title;
+            if (title == null || title.isEmpty()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(" > ");
+            }
+            builder.append(title);
+        }
+        return builder.toString();
     }
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int button) {
         boolean editRequested = RadialMenuConfig.rightClickToEdit ? button == 1 : button == 0 && isShiftKeyDown();
 
-        if (editRequested && hoveredSlot != RadialGeometry.NO_SLOT) {
-            openEditor();
+        if (editRequested) {
+            // The dead zone is the menu itself rather than any one entry, so editing there edits the menu - which is
+            // also the only way to reach the root menu's settings.
+            if (hoveredSlot == RadialGeometry.NO_SLOT) {
+                GuiStack.push(new GuiMenuSettings(currentMenu()));
+            } else {
+                openEditor();
+            }
             return;
         }
         if (button == 1) {
@@ -106,9 +156,19 @@ public class GuiRadialWheel extends GuiScreen {
         }
     }
 
-    /** Opens the editor for the slot under the cursor, empty or not - that is how a new entry gets added. */
+    /**
+     * Opens the editor for the sector under the cursor, empty or not - that is how a new entry gets added.
+     *
+     * <p>
+     * Sectors and list positions are not the same thing on a dynamic wheel, so the sector is translated first.
+     */
     private void openEditor() {
-        GuiStack.push(new GuiSlotEditor(currentMenu(), hoveredSlot));
+        MenuNode menu = currentMenu();
+        int index = menu.childIndexForSlot(hoveredSlot);
+        if (index < 0) {
+            index = menu.layoutOrDefault().mode == SlotLayout.Mode.DYNAMIC ? menu.firstFreeIndex() : hoveredSlot;
+        }
+        GuiStack.push(new GuiSlotEditor(menu, index));
     }
 
     @Override

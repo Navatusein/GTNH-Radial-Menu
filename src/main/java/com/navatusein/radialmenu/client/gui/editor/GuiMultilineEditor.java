@@ -102,12 +102,14 @@ public class GuiMultilineEditor extends GuiScreen {
                 .setFocused(true);
         }
 
-        int bottom = this.height - 50;
-        this.buttonList.add(new GuiButton(ID_ADD, left, bottom, 120, 20, I18n.format("radialmenu.lines.add")));
+        // Full width and directly under the lines, rather than tucked into a corner where it read as unrelated.
+        int addY = LIST_TOP + rows * ROW_HEIGHT + 4;
         this.buttonList
-            .add(new GuiButton(ID_DONE, this.width / 2 - 100, this.height - 24, 98, 20, I18n.format("gui.done")));
+            .add(new GuiButton(ID_ADD, left, addY, FIELD_WIDTH + 24, 20, I18n.format("radialmenu.lines.add")));
         this.buttonList
-            .add(new GuiButton(ID_CANCEL, this.width / 2 + 2, this.height - 24, 98, 20, I18n.format("gui.cancel")));
+            .add(new GuiButton(ID_DONE, this.width / 2 - 100, this.height - 28, 98, 20, I18n.format("gui.done")));
+        this.buttonList
+            .add(new GuiButton(ID_CANCEL, this.width / 2 + 2, this.height - 28, 98, 20, I18n.format("gui.cancel")));
     }
 
     /** Text fields are the source of truth while the screen is open, so they are read back before any reshuffle. */

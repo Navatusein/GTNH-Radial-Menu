@@ -26,6 +26,9 @@ public class MenuNode {
     /** Layout of this node's own children wheel. Only meaningful for categories. */
     public SlotLayout layout;
 
+    /** Colour overrides for this node's own children wheel. Null inherits the global settings. */
+    public MenuStyle style;
+
     /**
      * Child entries. Non-null marks this node as a category. A null element is an empty slot, which only happens under
      * {@link SlotLayout.Mode#FIXED}.
@@ -63,18 +66,80 @@ public class MenuNode {
         return layout == null ? SlotLayout.dynamic() : layout;
     }
 
-    /** Number of sectors this node's wheel should draw. */
+    /**
+     * Number of sectors this node's wheel draws.
+     *
+     * <p>
+     * A fixed wheel always has its configured number, gaps included. A dynamic one has as many as it has entries -
+     * the empty positions still sit in the list, they are simply not drawn.
+     */
     public int slotCount() {
-        return layoutOrDefault().slotCount(childrenOrEmpty().size());
+        if (layoutOrDefault().mode == SlotLayout.Mode.FIXED) {
+            return layoutOrDefault().slotCount(childrenOrEmpty().size());
+        }
+        return filledCount();
     }
 
-    /** Child at a sector index, or null for an empty slot or an out-of-range index. */
-    public MenuNode childAt(int slotIndex) {
-        List<MenuNode> kids = childrenOrEmpty();
-        if (slotIndex < 0 || slotIndex >= kids.size()) {
-            return null;
+    /** How many entries this menu actually holds, ignoring empty positions. */
+    public int filledCount() {
+        int count = 0;
+        for (MenuNode child : childrenOrEmpty()) {
+            if (child != null) {
+                count++;
+            }
         }
-        return kids.get(slotIndex);
+        return count;
+    }
+
+    /**
+     * Entry drawn in a sector, or null when that sector is empty.
+     *
+     * <p>
+     * Under a dynamic layout the sectors are the entries in order, skipping the gaps; under a fixed one a sector is
+     * a position in the list. Keeping the gaps in the list either way is what lets a menu be switched to dynamic and
+     * back without the entries losing the positions the player gave them.
+     */
+    public MenuNode childAt(int slotIndex) {
+        int index = childIndexForSlot(slotIndex);
+        return index < 0 ? null : children.get(index);
+    }
+
+    /**
+     * Index in {@link #children} of the entry drawn in a sector, or -1 if there is none.
+     *
+     * <p>
+     * The editor works in list indices, so anything that edits what a sector shows has to translate through here.
+     */
+    public int childIndexForSlot(int slotIndex) {
+        List<MenuNode> kids = childrenOrEmpty();
+        if (slotIndex < 0) {
+            return -1;
+        }
+        if (layoutOrDefault().mode == SlotLayout.Mode.FIXED) {
+            return slotIndex < kids.size() && kids.get(slotIndex) != null ? slotIndex : -1;
+        }
+        int seen = 0;
+        for (int i = 0; i < kids.size(); i++) {
+            if (kids.get(i) == null) {
+                continue;
+            }
+            if (seen == slotIndex) {
+                return i;
+            }
+            seen++;
+        }
+        return -1;
+    }
+
+    /** First position with no entry in it, or the end of the list. Where a new entry goes on a dynamic wheel. */
+    public int firstFreeIndex() {
+        List<MenuNode> kids = childrenOrEmpty();
+        for (int i = 0; i < kids.size(); i++) {
+            if (kids.get(i) == null) {
+                return i;
+            }
+        }
+        return kids.size();
     }
 
     /**
@@ -86,7 +151,12 @@ public class MenuNode {
      * invisible. Silently hiding entries a player configured is worse than a ring that grew a step.
      */
     public void ensureSlotCapacity() {
-        if (!isCategory() || layoutOrDefault().mode != SlotLayout.Mode.FIXED) {
+        if (!isCategory()) {
+            return;
+        }
+        if (layoutOrDefault().mode != SlotLayout.Mode.FIXED) {
+            // Deliberately keeps the empty positions: a dynamic wheel just does not draw them, so switching to
+            // dynamic and back leaves every entry on the sector the player put it on.
             return;
         }
         if (children.size() > layout.slots) {
@@ -115,12 +185,71 @@ public class MenuNode {
         children.set(slotIndex, child);
     }
 
+    /**
+     * Moves the entry at a list position one place towards the start or end.
+     *
+     * <p>
+     * What "one place" means follows the layout, because that is what the player sees. On a fixed wheel the sectors
+     * are list positions, so an entry swaps with its neighbour whether or not that neighbour is empty - which is how
+     * an entry is walked into a gap. On a dynamic wheel empty positions are not drawn at all, so swapping with one
+     * would look like nothing happened; there the entry swaps with the next entry that is actually on screen.
+     *
+     * @param direction -1 towards the start, 1 towards the end
+     * @return true if anything moved
+     */
+    public boolean moveChild(int index, int direction) {
+        if (!isCategory()) {
+            return false;
+        }
+        return moveInList(children, index, direction, layoutOrDefault().mode == SlotLayout.Mode.FIXED);
+    }
+
+    /**
+     * The same move against a caller's own list.
+     *
+     * <p>
+     * The editor reorders a working copy so that cancelling really cancels, and it has to honour the layout the
+     * player has just chosen on screen rather than the one currently saved.
+     */
+    public static boolean moveInList(List<MenuNode> kids, int index, int direction, boolean fixedLayout) {
+        if (kids == null || direction == 0) {
+            return false;
+        }
+        if (index < 0 || index >= kids.size() || kids.get(index) == null) {
+            return false;
+        }
+
+        int target = -1;
+        if (fixedLayout) {
+            int candidate = index + direction;
+            if (candidate >= 0 && candidate < kids.size()) {
+                target = candidate;
+            }
+        } else {
+            for (int i = index + direction; i >= 0 && i < kids.size(); i += direction) {
+                if (kids.get(i) != null) {
+                    target = i;
+                    break;
+                }
+            }
+        }
+
+        if (target < 0) {
+            return false;
+        }
+        MenuNode moved = kids.get(index);
+        kids.set(index, kids.get(target));
+        kids.set(target, moved);
+        return true;
+    }
+
     public MenuNode copy() {
         MenuNode copy = new MenuNode();
         copy.title = title;
         copy.icon = icon == null ? null : icon.copy();
         copy.keepOpen = keepOpen;
         copy.layout = layout;
+        copy.style = style;
         copy.action = action == null ? null : action.copy();
         if (children != null) {
             copy.children = new ArrayList<>(children.size());
@@ -154,6 +283,7 @@ public class MenuNode {
             ensureSlotCapacity();
         } else {
             layout = null;
+            style = null;
         }
     }
 }

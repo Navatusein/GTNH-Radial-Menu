@@ -4,13 +4,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
 
 import org.lwjgl.input.Keyboard;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.ui.Ui;
+import com.navatusein.radialmenu.client.gui.ui.UiCheckbox;
+import com.navatusein.radialmenu.client.gui.ui.UiScreen;
+import com.navatusein.radialmenu.client.gui.ui.UiTabButton;
 import com.navatusein.radialmenu.client.icon.IconRenderer;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileStorage;
@@ -20,132 +23,205 @@ import com.navatusein.radialmenu.core.action.ActionTypes;
 import com.navatusein.radialmenu.core.action.Placeholders;
 import com.navatusein.radialmenu.core.model.IconSpec;
 import com.navatusein.radialmenu.core.model.MenuNode;
-import com.navatusein.radialmenu.core.model.SlotLayout;
 
 /**
  * Edits one slot.
  *
  * <p>
- * The action's own parameters are not hard-coded here: they are built from the chosen {@link ActionType}'s field
- * descriptors. That is what keeps later action types from needing a screen each - adding the command action in phase 2
- * adds no GUI code at all.
+ * Two sections - what the entry looks like, and what it does - because those are decided at different moments, and
+ * mixing them left the screen an undifferentiated column of buttons.
  *
  * <p>
- * Edits are made on a copy and only written back on save, so cancelling really cancels.
+ * "Submenu" is one of the action-type tabs rather than a separate switch. A slot does one thing, and opening a
+ * submenu is one of the things it can do; as a separate mode it meant two controls had to agree with each other. Its
+ * settings - slot count, fixed or dynamic, and the colours - are simply that type's fields.
+ *
+ * <p>
+ * Action fields are still generated from the type's descriptors, so a new action type needs no code here.
  */
-public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callback, GuiIconPicker.Callback {
+public class GuiSlotEditor extends UiScreen implements GuiKeyBindPicker.Callback, GuiIconPicker.Callback {
 
-    private static final int ID_SAVE = 1;
-    private static final int ID_CANCEL = 2;
-    private static final int ID_DELETE = 3;
-    private static final int ID_TYPE = 4;
-    private static final int ID_KEEP_OPEN = 5;
-    private static final int ID_ICON = 6;
-    private static final int ID_MAKE_CATEGORY = 7;
-    private static final int ID_FIELD_BASE = 100;
+    private static final int ID_ICON = 1;
+    private static final int ID_KEEP_OPEN = 2;
+    private static final int ID_TAB_BASE = 10;
+    private static final int ID_FIELD_BASE = 40;
 
     private final MenuNode parent;
     private final int slotIndex;
 
     /** Working copy; the parent is only touched on save. */
-    private MenuNode draft;
+    private final MenuNode draft;
+
+    /** Which type tab is selected. Drives the fields shown, and whether the node becomes a category. */
+    private String selectedType;
 
     private GuiTextField titleField;
+
+    /** Survives control rebuilds, which recreate the field. */
+    private String titleText;
 
     private final List<ActionField> editableFields = new ArrayList<>();
     private final List<GuiTextField> fieldInputs = new ArrayList<>();
 
-    /**
-     * Control rebuilds wait for the next frame: GuiScreen.mouseClicked iterates buttonList by index and calls
-     * actionPerformed from inside that loop, so replacing the list mid-click makes it walk the new buttons too.
-     */
-    private boolean rebuildPending;
+    private int actionSectionTop;
+
+    private int iconPreviewLeft;
+    private int iconPreviewTop;
 
     public GuiSlotEditor(MenuNode parent, int slotIndex) {
         this.parent = parent;
         this.slotIndex = slotIndex;
 
         MenuNode existing = parent.childAt(slotIndex);
-        if (existing != null) {
-            this.draft = existing.copy();
-        } else {
-            this.draft = MenuNode.leaf(
-                "New entry",
+        this.draft = existing != null ? existing.copy()
+            : MenuNode.leaf(
+                I18n.format("radialmenu.editor.newEntry"),
                 IconSpec.item("minecraft:stone", 0),
                 ActionTypes.get(ActionTypes.KEYBIND)
                     .newSpec());
+
+        this.titleText = draft.title == null ? "" : draft.title;
+        this.selectedType = draft.isCategory() ? ActionTypes.SUBMENU
+            : (draft.action == null ? ActionTypes.KEYBIND : draft.action.type);
+
+        // Submenu settings live on the node, so mirror them into a spec the generic field code can drive.
+        if (ActionTypes.SUBMENU.equals(selectedType)) {
+            draft.action = SubmenuFields.toSpec(draft);
         }
     }
 
     @Override
-    public void initGui() {
-        super.initGui();
-        Keyboard.enableRepeatEvents(true);
-
-        int left = this.width / 2 - 150;
-        int top = 34;
-
-        titleField = new GuiTextField(this.fontRendererObj, left + 60, top, 240, 16);
-        titleField.setMaxStringLength(64);
-        titleField.setText(draft.title == null ? "" : draft.title);
-
-        rebuildControls(left, top);
+    protected String titleKey() {
+        return "radialmenu.editor.slot";
     }
 
-    private void rebuildControls(int left, int top) {
-        this.buttonList.clear();
-        fieldInputs.clear();
+    @Override
+    protected Object[] titleArgs() {
+        return new Object[] { Integer.valueOf(slotIndex + 1) };
+    }
+
+    @Override
+    protected int panelWidth() {
+        return 330;
+    }
+
+    @Override
+    protected void buildControls() {
         editableFields.clear();
+        fieldInputs.clear();
 
-        int y = top + 22;
+        int left = contentLeft();
+        int controlLeft = left + Ui.LABEL_WIDTH + Ui.GAP;
+        int controlWidth = contentRight() - controlLeft;
+        int y = scrolledTop() + 14;
 
-        this.buttonList.add(new GuiButton(ID_ICON, left + 60, y, 240, 20, iconLabel()));
-        y += 24;
+        // Built at its real size: GuiTextField works out its horizontal scroll from the width it has when the
+        // text is set, so a placeholder-sized field resized afterwards renders blank until it is clicked.
+        titleField = new GuiTextField(this.fontRendererObj, controlLeft + 1, y + 3, controlWidth - 2, 14);
+        titleField.setMaxStringLength(64);
+        titleField.setText(titleText);
+        titleField.setCursorPositionZero();
+        y += Ui.STEP;
 
-        this.buttonList.add(new GuiButton(ID_KEEP_OPEN, left + 60, y, 240, 20, keepOpenLabel()));
-        y += 24;
+        // The preview sits beside the button rather than on it. Drawing an item over a vanilla button means drawing
+        // it after the button, and the GL state a button leaves behind renders items dark - this keeps the icon on
+        // the known-good path, before the buttons, and reads as a preview besides.
+        iconPreviewLeft = controlLeft;
+        iconPreviewTop = y;
+        this.buttonList.add(
+            new GuiButton(
+                ID_ICON,
+                controlLeft + Ui.ROW + Ui.GAP,
+                y,
+                controlWidth - Ui.ROW - Ui.GAP,
+                Ui.ROW,
+                iconLabel()));
+        tooltip(ID_ICON, describe("radialmenu.editor.icon.tip"));
+        y += Ui.STEP;
 
-        this.buttonList.add(new GuiButton(ID_MAKE_CATEGORY, left + 60, y, 240, 20, categoryLabel()));
-        y += 24;
+        this.buttonList.add(
+            new UiCheckbox(
+                ID_KEEP_OPEN,
+                controlLeft,
+                y,
+                controlWidth,
+                I18n.format("radialmenu.editor.keepOpen"),
+                draft.keepOpen));
+        tooltip(ID_KEEP_OPEN, describe("radialmenu.editor.keepOpen.tip"));
+        y += Ui.STEP + Ui.GAP;
 
-        if (!draft.isCategory()) {
-            this.buttonList.add(new GuiButton(ID_TYPE, left + 60, y, 240, 20, typeLabel()));
-            y += 24;
+        actionSectionTop = y;
+        y += 14;
 
-            ActionType type = ActionTypes.get(draft.action == null ? null : draft.action.type);
-            if (type != null) {
-                for (ActionField field : type.fields) {
-                    addFieldControl(field, left, y);
-                    y += 22;
-                }
+        List<ActionType> types = ActionTypes.all();
+        int tabWidth = (contentWidth() - (types.size() - 1) * 2) / Math.max(1, types.size());
+        for (int i = 0; i < types.size(); i++) {
+            ActionType type = types.get(i);
+            this.buttonList.add(
+                new UiTabButton(
+                    ID_TAB_BASE + i,
+                    left + i * (tabWidth + 2),
+                    y,
+                    tabWidth,
+                    I18n.format(type.labelKey),
+                    type.id.equals(selectedType)));
+            tooltip(ID_TAB_BASE + i, describe(type.labelKey + ".tip"));
+        }
+        y += UiTabButton.HEIGHT + Ui.GAP;
+
+        ActionType selected = ActionTypes.get(selectedType);
+        if (selected != null) {
+            for (ActionField field : selected.fields) {
+                addFieldControl(field, controlLeft, controlWidth, y);
+                y += Ui.STEP;
             }
         }
 
-        int buttonsY = Math.min(this.height - 28, y + 6);
-        this.buttonList.add(new GuiButton(ID_SAVE, left, buttonsY, 96, 20, I18n.format("radialmenu.editor.save")));
-        this.buttonList
-            .add(new GuiButton(ID_DELETE, left + 102, buttonsY, 96, 20, I18n.format("radialmenu.editor.delete")));
-        this.buttonList.add(new GuiButton(ID_CANCEL, left + 204, buttonsY, 96, 20, I18n.format("gui.cancel")));
+        setContentHeight(y - scrolledTop() + Ui.PAD);
+        addBottomBar("radialmenu.editor.save", "radialmenu.editor.delete", "gui.cancel");
     }
 
-    private void addFieldControl(ActionField field, int left, int y) {
+    private void addFieldControl(ActionField field, int controlLeft, int controlWidth, int y) {
         int index = editableFields.size();
         editableFields.add(field);
+        tooltip(ID_FIELD_BASE + index, describe(field.tooltipKey()));
 
         String current = draft.action.getString(field.key, field.defaultValue);
 
         switch (field.kind) {
             case KEYBIND_REF:
             case MULTILINE_STRING:
-            case BOOLEAN:
             case ENUM:
             case PROFILE_REF:
+            case COLOR:
                 this.buttonList.add(
-                    new GuiButton(ID_FIELD_BASE + index, left + 120, y, 180, 20, buttonValueLabel(field, current)));
+                    new GuiButton(
+                        ID_FIELD_BASE + index,
+                        controlLeft,
+                        y,
+                        controlWidth,
+                        Ui.ROW,
+                        buttonValueLabel(field, current)));
+                fieldInputs.add(null);
+                break;
+            case BOOLEAN:
+                this.buttonList.add(
+                    new UiCheckbox(
+                        ID_FIELD_BASE + index,
+                        controlLeft,
+                        y,
+                        controlWidth,
+                        I18n.format(field.labelKey),
+                        Boolean.parseBoolean(current)));
                 fieldInputs.add(null);
                 break;
             default:
-                GuiTextField input = new GuiTextField(this.fontRendererObj, left + 122, y + 3, 176, 14);
+                GuiTextField input = new GuiTextField(
+                    this.fontRendererObj,
+                    controlLeft + 1,
+                    y + 3,
+                    controlWidth - 2,
+                    14);
                 input.setMaxStringLength(256);
                 input.setText(current == null ? "" : current);
                 fieldInputs.add(input);
@@ -154,67 +230,67 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
     }
 
     private String buttonValueLabel(ActionField field, String current) {
-        if (field.kind == ActionField.Kind.KEYBIND_REF) {
-            return current == null || current.isEmpty() ? I18n.format("radialmenu.editor.pickKeybind")
-                : I18n.format(current);
+        switch (field.kind) {
+            case KEYBIND_REF:
+                return current == null || current.isEmpty() ? I18n.format("radialmenu.editor.pickKeybind")
+                    : I18n.format(current);
+            case MULTILINE_STRING:
+                return I18n.format("radialmenu.editor.editLines", Placeholders.splitLines(current).length);
+            case COLOR:
+                return current == null || current.trim()
+                    .isEmpty() ? I18n.format("radialmenu.editor.inherit") : current;
+            case ENUM:
+                return localizedValue(field, current);
+            default:
+                return current == null ? "" : current;
         }
-        if (field.kind == ActionField.Kind.MULTILINE_STRING) {
-            // The text itself will not fit on a button, so show how much of it there is.
-            int count = Placeholders.splitLines(current).length;
-            return I18n.format("radialmenu.editor.editLines", count);
+    }
+
+    /**
+     * Shows an enum value the way the rest of the interface is written.
+     *
+     * <p>
+     * The stored value stays lower case; only the display changes. A value with no translation falls back to itself
+     * rather than showing a raw key, so an action type that forgot a string still reads as something.
+     */
+    private static String localizedValue(ActionField field, String value) {
+        if (value == null || value.isEmpty()) {
+            return "";
         }
-        return current == null ? "" : current;
-    }
-
-    private String iconLabel() {
-        IconSpec icon = draft.icon;
-        return I18n.format("radialmenu.editor.icon") + ": " + (icon == null || icon.id == null ? "-" : icon.id);
-    }
-
-    private String keepOpenLabel() {
-        return I18n.format("radialmenu.editor.keepOpen") + ": "
-            + I18n.format(draft.keepOpen ? "options.on" : "options.off");
-    }
-
-    private String categoryLabel() {
-        return I18n.format(draft.isCategory() ? "radialmenu.editor.isCategory" : "radialmenu.editor.isAction");
-    }
-
-    private String typeLabel() {
-        ActionType type = ActionTypes.get(draft.action == null ? null : draft.action.type);
-        return I18n.format("radialmenu.editor.actionType") + ": " + (type == null ? "?" : I18n.format(type.labelKey));
+        String key = field.valueLabelKey(value);
+        String translated = I18n.format(key);
+        return translated.equals(key) ? value : translated;
     }
 
     @Override
     protected void actionPerformed(GuiButton button) {
         switch (button.id) {
-            case ID_SAVE:
+            case ID_PRIMARY:
                 save();
                 return;
-            case ID_CANCEL:
-                GuiStack.pop();
+            case ID_SECONDARY:
+                onCancel();
                 return;
-            case ID_DELETE:
-                deleteEntry();
+            case ID_DANGER:
+                apply(null);
                 return;
             case ID_ICON:
                 captureInputs();
                 GuiStack.push(new GuiIconPicker(this, draft.icon == null ? null : draft.icon.color));
                 return;
             case ID_KEEP_OPEN:
-                draft.keepOpen = !draft.keepOpen;
-                button.displayString = keepOpenLabel();
-                return;
-            case ID_MAKE_CATEGORY:
-                captureInputs();
-                toggleCategory();
-                return;
-            case ID_TYPE:
-                captureInputs();
-                cycleActionType();
+                ((UiCheckbox) button).toggle();
+                draft.keepOpen = ((UiCheckbox) button).checked;
                 return;
             default:
                 break;
+        }
+
+        List<ActionType> types = ActionTypes.all();
+        int tabIndex = button.id - ID_TAB_BASE;
+        if (tabIndex >= 0 && tabIndex < types.size()) {
+            selectType(types.get(tabIndex).id);
+            return;
         }
 
         int fieldIndex = button.id - ID_FIELD_BASE;
@@ -223,8 +299,25 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
         }
     }
 
+    private void selectType(String typeId) {
+        if (typeId.equals(selectedType)) {
+            return;
+        }
+        captureInputs();
+        selectedType = typeId;
+
+        if (ActionTypes.SUBMENU.equals(typeId)) {
+            draft.action = SubmenuFields.toSpec(draft);
+        } else {
+            draft.action = ActionTypes.get(typeId)
+                .newSpec();
+        }
+        requestRebuild();
+    }
+
     private void onFieldButton(ActionField field, GuiButton button) {
-        String current = draft.action.getString(field.key, field.defaultValue);
+        final String key = field.key;
+        String current = draft.action.getString(key, field.defaultValue);
 
         switch (field.kind) {
             case KEYBIND_REF:
@@ -233,36 +326,46 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
                 return;
             case MULTILINE_STRING:
                 captureInputs();
-                openLineEditor(field);
+                GuiStack.push(new GuiMultilineEditor(field.labelKey, current, new GuiMultilineEditor.Result() {
+
+                    @Override
+                    public void onLinesEdited(String text) {
+                        draft.action.set(key, text);
+                        requestRebuild();
+                    }
+                }));
+                return;
+            case COLOR:
+                captureInputs();
+                GuiStack.push(new GuiColorPicker(current, true, new GuiColorPicker.Result() {
+
+                    @Override
+                    public void onColorPicked(String hex) {
+                        draft.action.set(key, hex);
+                        requestRebuild();
+                    }
+                }));
                 return;
             case BOOLEAN:
-                draft.action.set(field.key, Boolean.toString(!Boolean.parseBoolean(current)));
-                break;
+                ((UiCheckbox) button).toggle();
+                draft.action.set(key, Boolean.toString(((UiCheckbox) button).checked));
+                return;
             case ENUM:
-                draft.action.set(field.key, next(field.options, current));
+                draft.action.set(key, next(field.options, current));
                 break;
             case PROFILE_REF:
-                draft.action.set(field.key, next(ProfileStorage.listProfileNames(), current));
+                draft.action.set(key, next(ProfileStorage.listProfileNames(), current));
                 break;
             default:
                 return;
         }
-        button.displayString = buttonValueLabel(field, draft.action.getString(field.key, ""));
+        button.displayString = buttonValueLabel(field, draft.action.getString(key, ""));
     }
 
-    private void openLineEditor(final ActionField field) {
-        GuiStack.push(
-            new GuiMultilineEditor(
-                field.labelKey,
-                draft.action.getString(field.key, ""),
-                new GuiMultilineEditor.Result() {
-
-                    @Override
-                    public void onLinesEdited(String text) {
-                        draft.action.set(field.key, text);
-                        rebuildPending = true;
-                    }
-                }));
+    /** @return the translated text, or null when the key has no string - so a missing tooltip shows nothing */
+    private static String describe(String key) {
+        String translated = I18n.format(key);
+        return translated.equals(key) ? null : translated;
     }
 
     private static String next(List<String> options, String current) {
@@ -273,51 +376,12 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
         return options.get((index + 1) % options.size());
     }
 
-    private void cycleActionType() {
-        List<ActionType> types = ActionTypes.all();
-        if (types.isEmpty()) {
-            return;
-        }
-        String currentId = draft.action == null ? null : draft.action.type;
-        int index = -1;
-        for (int i = 0; i < types.size(); i++) {
-            if (types.get(i).id.equals(currentId)) {
-                index = i;
-                break;
-            }
-        }
-        draft.action = types.get((index + 1) % types.size())
-            .newSpec();
-        rebuildPending = true;
-    }
-
-    private void toggleCategory() {
-        if (draft.isCategory()) {
-            draft.children = null;
-            draft.layout = null;
-            draft.action = ActionTypes.get(ActionTypes.KEYBIND)
-                .newSpec();
-        } else {
-            draft.action = null;
-            draft.layout = SlotLayout.fixed(SlotLayout.DEFAULT_SLOTS);
-            draft.children = new ArrayList<>();
-            draft.ensureSlotCapacity();
-        }
-        rebuildPending = true;
-    }
-
-    /**
-     * Copies what is typed in the text boxes into the draft.
-     *
-     * <p>
-     * Called before opening a picker as well as on save, because returning from a picker re-runs initGui and rebuilds
-     * the boxes from the draft - anything typed but not captured would be silently reverted.
-     */
+    /** Copies what is typed into the draft, so opening a picker cannot discard it. */
     private void captureInputs() {
         if (titleField != null) {
-            draft.title = titleField.getText()
-                .trim();
+            titleText = titleField.getText();
         }
+        draft.title = titleText.trim();
         for (int i = 0; i < editableFields.size() && i < fieldInputs.size(); i++) {
             GuiTextField input = fieldInputs.get(i);
             if (input != null && draft.action != null) {
@@ -328,84 +392,116 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
 
     private void save() {
         captureInputs();
+
+        if (ActionTypes.SUBMENU.equals(selectedType)) {
+            SubmenuFields.applyToNode(draft);
+        } else {
+            draft.children = null;
+            draft.layout = null;
+            draft.style = null;
+        }
+
         draft.normalize();
-        setChild(draft);
-        persist();
+        apply(draft);
     }
 
-    private void deleteEntry() {
-        setChild(null);
-        persist();
-    }
-
-    private void setChild(MenuNode node) {
+    private void apply(MenuNode node) {
         parent.setChildAt(slotIndex, node);
-    }
-
-    private void persist() {
         ProfileManager.active()
             .normalize();
         ProfileManager.saveActive();
         IconRenderer.clearCache();
-        GuiStack.pop();
+        // Editing is finished, so the wheel closes with the editor instead of reappearing beneath it.
+        GuiStack.closeAll();
     }
 
     @Override
     public void onKeyBindPicked(String description, String category) {
         draft.action.set(ActionTypes.PARAM_BINDING, description);
         draft.action.set(ActionTypes.PARAM_CATEGORY, category == null ? "" : category);
-        rebuildPending = true;
+        requestRebuild();
     }
 
     @Override
     public void onIconPicked(IconSpec icon) {
         draft.icon = icon;
-        rebuildPending = true;
+        requestRebuild();
+    }
+
+    /**
+     * Escape and Cancel close the wheel along with the editor.
+     *
+     * <p>
+     * Returning to a wheel that is no longer being held open just leaves something on screen the player then has to
+     * dismiss separately.
+     */
+    @Override
+    protected void onCancel() {
+        GuiStack.closeAll();
     }
 
     @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        if (rebuildPending) {
-            rebuildPending = false;
-            rebuildControls(this.width / 2 - 150, 34);
+    protected void beforeScroll() {
+        captureInputs();
+    }
+
+    @Override
+    protected void drawContent(int mouseX, int mouseY, float partialTicks) {
+        int left = contentLeft();
+        int y = scrolledTop();
+
+        Ui.sectionHeader(I18n.format("radialmenu.editor.sectionLook"), left, y, contentRight());
+        y += 14;
+
+        if (isVisibleRow(y)) {
+            Ui.rowLabel(I18n.format("radialmenu.editor.title"), left, y);
+            titleField.drawTextBox();
+        }
+        y += Ui.STEP;
+
+        if (isVisibleRow(y)) {
+            Ui.rowLabel(I18n.format("radialmenu.editor.icon"), left, y);
         }
 
-        this.drawDefaultBackground();
-        this.drawCenteredString(
-            this.fontRendererObj,
-            I18n.format("radialmenu.editor.slot", slotIndex + 1),
-            this.width / 2,
-            12,
-            0xFFFFFF);
+        Ui.sectionHeader(I18n.format("radialmenu.editor.sectionAction"), left, actionSectionTop, contentRight());
 
-        int left = this.width / 2 - 150;
-        this.fontRendererObj.drawString(I18n.format("radialmenu.editor.title"), left, 38, 0xA0A0A0);
-        titleField.drawTextBox();
+        int fieldY = actionSectionTop + 14 + UiTabButton.HEIGHT + Ui.GAP;
+        for (ActionField field : editableFields) {
+            if (field.kind != ActionField.Kind.BOOLEAN && isVisibleRow(fieldY)) {
+                Ui.rowLabel(Ui.fit(I18n.format(field.labelKey), Ui.LABEL_WIDTH), left, fieldY);
+            }
+            fieldY += Ui.STEP;
+        }
 
-        for (int i = 0; i < editableFields.size(); i++) {
-            GuiTextField input = fieldInputs.get(i);
-            int y = input != null ? input.yPosition - 3 : labelYForButton(i);
-            this.fontRendererObj.drawString(I18n.format(editableFields.get(i).labelKey), left, y + 6, 0xA0A0A0);
-            if (input != null) {
+        for (GuiTextField input : fieldInputs) {
+            if (input != null && isVisibleRow(input.yPosition - 3)) {
                 input.drawTextBox();
             }
         }
 
-        if (draft.icon != null) {
-            IconRenderer.draw(draft.icon, left + 20, 58);
-        }
-
-        super.drawScreen(mouseX, mouseY, partialTicks);
+        drawIconPreview();
     }
 
-    private int labelYForButton(int fieldIndex) {
-        for (Object raw : this.buttonList) {
-            GuiButton button = (GuiButton) raw;
-            if (button.id == ID_FIELD_BASE + fieldIndex) {
-                return button.yPosition;
-            }
+    private String iconLabel() {
+        return draft.icon == null || draft.icon.id == null ? I18n.format("radialmenu.editor.pickIcon")
+            : Ui.fit(draft.icon.id, contentWidth() - Ui.LABEL_WIDTH - Ui.ROW - 16);
+    }
+
+    /** The preview tile, drawn with the content so it never has to fight a button for the GL state. */
+    private void drawIconPreview() {
+        if (!isVisibleRow(iconPreviewTop)) {
+            return;
         }
-        return 0;
+        Ui.frame(
+            iconPreviewLeft,
+            iconPreviewTop,
+            iconPreviewLeft + Ui.ROW,
+            iconPreviewTop + Ui.ROW,
+            0xFF101010,
+            Ui.PANEL_BORDER);
+        if (draft.icon != null) {
+            IconRenderer.draw(draft.icon, iconPreviewLeft + 2, iconPreviewTop + 2);
+        }
     }
 
     @Override
@@ -420,29 +516,18 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
     }
 
     @Override
-    protected void keyTyped(char typedChar, int keyCode) {
-        if (keyCode == 1) {
-            GuiStack.pop();
-            return;
+    protected boolean handleKey(char typedChar, int keyCode) {
+        if (keyCode == Keyboard.KEY_TAB) {
+            return true;
         }
         if (titleField.textboxKeyTyped(typedChar, keyCode)) {
-            return;
+            return true;
         }
         for (GuiTextField input : fieldInputs) {
             if (input != null && input.textboxKeyTyped(typedChar, keyCode)) {
-                return;
+                return true;
             }
         }
-    }
-
-    @Override
-    public void onGuiClosed() {
-        super.onGuiClosed();
-        Keyboard.enableRepeatEvents(false);
-    }
-
-    @Override
-    public boolean doesGuiPauseGame() {
         return false;
     }
 }

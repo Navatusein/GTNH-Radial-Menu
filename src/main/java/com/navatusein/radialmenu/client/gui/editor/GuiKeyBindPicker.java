@@ -1,31 +1,36 @@
 package com.navatusein.radialmenu.client.gui.editor;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
-import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.client.settings.GameSettings;
 import net.minecraft.client.settings.KeyBinding;
-import net.minecraft.util.EnumChatFormatting;
 
-import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.ui.Ui;
+import com.navatusein.radialmenu.client.gui.ui.UiList;
+import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.input.KeyBindingLookup;
 
 /**
  * Picks a keybinding for a menu entry.
  *
  * <p>
+ * Grouped under category headings, the way the vanilla controls screen presents them - with a hundred bindings in a
+ * modded pack, a flat alphabetical list gives no way to find the one mod you are looking for.
+ *
+ * <p>
  * Every registered binding is listed, including ones with no key assigned and ones whose default is a mouse button.
- * MineMenu's equivalent filters on {@code getKeyCodeDefault() >= 0}, which quietly drops the mouse-default bindings;
- * since the whole point here is to reach bindings the player has not given a key, the list stays unfiltered.
+ * MineMenu filters on {@code getKeyCodeDefault() >= 0}, which quietly drops the mouse-default bindings; since the
+ * point here is to reach bindings the player never gave a key, the list stays unfiltered.
  */
-public class GuiKeyBindPicker extends GuiScreen {
+public class GuiKeyBindPicker extends UiScreen {
 
     /** Receives the chosen binding's description and category. */
     public interface Callback {
@@ -33,63 +38,96 @@ public class GuiKeyBindPicker extends GuiScreen {
         void onKeyBindPicked(String description, String category);
     }
 
-    private static final int ROW_HEIGHT = 14;
-    private static final int LIST_TOP = 48;
-    private static final int LIST_BOTTOM_MARGIN = 34;
+    /** A row is either a category heading or a binding under it. */
+    private static final class Row {
+
+        final String heading;
+        final KeyBinding binding;
+
+        Row(String heading, KeyBinding binding) {
+            this.heading = heading;
+            this.binding = binding;
+        }
+    }
 
     private final Callback callback;
 
-    private final List<KeyBinding> allBindings = new ArrayList<>();
-
-    private final List<KeyBinding> visible = new ArrayList<>();
+    private final List<Row> rows = new ArrayList<>();
 
     private GuiTextField searchField;
+    private String query = "";
 
-    private int scrollRow;
+    private UiList list;
+    private int listScroll;
 
     public GuiKeyBindPicker(Callback callback) {
         this.callback = callback;
     }
 
     @Override
-    public void initGui() {
-        super.initGui();
-        Keyboard.enableRepeatEvents(true);
+    protected String titleKey() {
+        return "radialmenu.editor.pickKeybind";
+    }
 
-        allBindings.clear();
-        allBindings.addAll(KeyBindingLookup.all());
+    @Override
+    protected int panelWidth() {
+        return 360;
+    }
 
-        searchField = new GuiTextField(this.fontRendererObj, this.width / 2 - 140, 26, 280, 16);
+    @Override
+    protected void buildControls() {
+        searchField = new GuiTextField(
+            this.fontRendererObj,
+            contentLeft() + 1,
+            contentTop() + 3,
+            contentWidth() - 2,
+            14);
+        searchField.setMaxStringLength(64);
+        searchField.setText(query);
+        searchField.setCursorPositionEnd();
         searchField.setFocused(true);
 
-        this.buttonList.clear();
-        this.buttonList
-            .add(new GuiButton(0, this.width / 2 - 100, this.height - 26, 200, 20, I18n.format("gui.cancel")));
+        list = new UiList(contentLeft(), contentTop() + Ui.STEP, contentRight(), panelBottom - Ui.PAD, 12);
+        rebuildRows();
+        list.scrollTo(listScroll, rows.size());
 
-        refilter();
+        addBottomBar("gui.cancel", null, null);
     }
 
-    private int rowsVisible() {
-        return Math.max(1, (this.height - LIST_TOP - LIST_BOTTOM_MARGIN) / ROW_HEIGHT);
-    }
+    /** Flattens the bindings into headings and entries, keeping categories in the order the game registered them. */
+    private void rebuildRows() {
+        rows.clear();
 
-    private void refilter() {
-        String query = searchField.getText()
-            .trim()
+        String needle = query.trim()
             .toLowerCase();
-        visible.clear();
-        for (KeyBinding binding : allBindings) {
-            if (query.isEmpty() || matches(binding, query)) {
-                visible.add(binding);
+        Map<String, List<KeyBinding>> byCategory = new LinkedHashMap<>();
+
+        for (KeyBinding binding : KeyBindingLookup.all()) {
+            if (!needle.isEmpty() && !matches(binding, needle)) {
+                continue;
+            }
+            String category = binding.getKeyCategory();
+            List<KeyBinding> bucket = byCategory.get(category);
+            if (bucket == null) {
+                bucket = new ArrayList<>();
+                byCategory.put(category, bucket);
+            }
+            bucket.add(binding);
+        }
+
+        for (Map.Entry<String, List<KeyBinding>> entry : byCategory.entrySet()) {
+            rows.add(new Row(I18n.format(entry.getKey()), null));
+            for (KeyBinding binding : entry.getValue()) {
+                rows.add(new Row(null, binding));
             }
         }
-        scrollRow = 0;
     }
 
-    private boolean matches(KeyBinding binding, String query) {
-        return contains(I18n.format(binding.getKeyDescription()), query) || contains(binding.getKeyDescription(), query)
-            || contains(I18n.format(binding.getKeyCategory()), query)
-            || contains(binding.getKeyCategory(), query);
+    private static boolean matches(KeyBinding binding, String needle) {
+        return contains(I18n.format(binding.getKeyDescription()), needle)
+            || contains(binding.getKeyDescription(), needle)
+            || contains(I18n.format(binding.getKeyCategory()), needle)
+            || contains(binding.getKeyCategory(), needle);
     }
 
     private static boolean contains(String haystack, String needle) {
@@ -98,107 +136,83 @@ public class GuiKeyBindPicker extends GuiScreen {
     }
 
     @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        this.drawDefaultBackground();
-        this.drawCenteredString(
-            this.fontRendererObj,
-            I18n.format("radialmenu.editor.pickKeybind"),
-            this.width / 2,
-            10,
-            0xFFFFFF);
+    protected void drawContent(int mouseX, int mouseY, float partialTicks) {
         searchField.drawTextBox();
+        list.drawFrame();
 
-        int rows = rowsVisible();
-        for (int row = 0; row < rows && row + scrollRow < visible.size(); row++) {
-            KeyBinding binding = visible.get(row + scrollRow);
-            int y = LIST_TOP + row * ROW_HEIGHT;
-            boolean hovered = mouseY >= y && mouseY < y + ROW_HEIGHT
-                && mouseX >= this.width / 2 - 150
-                && mouseX <= this.width / 2 + 150;
+        int hovered = list.itemAt(mouseX, mouseY, rows.size());
 
-            String label = I18n.format(binding.getKeyDescription());
-            String key = KeyBindingLookup.isUnbound(binding)
-                ? EnumChatFormatting.DARK_GRAY + I18n.format("radialmenu.editor.unbound")
-                : EnumChatFormatting.GRAY + GameSettings.getKeyDisplayString(binding.getKeyCode());
+        for (int i = 0; i < list.rowsVisible() && i + list.firstRow() < rows.size(); i++) {
+            Row row = rows.get(i + list.firstRow());
+            int y = list.rowTop(i);
 
+            if (row.heading != null) {
+                this.fontRendererObj.drawString(row.heading, list.textLeft(), y + 2, Ui.TEXT_HEADER);
+                continue;
+            }
+
+            list.drawRowBackground(i, false, i + list.firstRow() == hovered);
+
+            String name = I18n.format(row.binding.getKeyDescription());
+            this.fontRendererObj.drawString(Ui.fit(name, list.textWidth() - 80), list.textLeft() + 6, y + 2, Ui.TEXT);
+
+            boolean unbound = KeyBindingLookup.isUnbound(row.binding);
+            String key = unbound ? I18n.format("radialmenu.editor.unbound")
+                : GameSettings.getKeyDisplayString(row.binding.getKeyCode());
             this.fontRendererObj.drawString(
-                (hovered ? EnumChatFormatting.YELLOW.toString() : "") + label,
-                this.width / 2 - 150,
-                y + 3,
-                0xFFFFFF);
-            this.fontRendererObj.drawString(key, this.width / 2 + 60, y + 3, 0xFFFFFF);
+                key,
+                list.right - 8 - this.fontRendererObj.getStringWidth(key),
+                y + 2,
+                unbound ? Ui.TEXT_MUTED : Ui.TEXT);
         }
 
-        if (visible.size() > rows) {
-            this.drawCenteredString(
-                this.fontRendererObj,
-                (scrollRow + 1) + "-" + Math.min(visible.size(), scrollRow + rows) + " / " + visible.size(),
-                this.width / 2,
-                this.height - 38,
-                0x808080);
-        }
-
-        super.drawScreen(mouseX, mouseY, partialTicks);
+        list.drawScrollbar(rows.size());
     }
 
     @Override
     public void handleMouseInput() {
         super.handleMouseInput();
-        int wheel = Mouse.getEventDWheel();
-        if (wheel != 0) {
-            int maxScroll = Math.max(0, visible.size() - rowsVisible());
-            scrollRow = Math.max(0, Math.min(maxScroll, scrollRow + (wheel > 0 ? -1 : 1)));
+        list.scroll(Mouse.getEventDWheel(), rows.size());
+        listScroll = list.firstRow();
+    }
+
+    @Override
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) {
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+        searchField.mouseClicked(mouseX, mouseY, mouseButton);
+
+        if (mouseButton != 0) {
+            return;
+        }
+        int index = list.itemAt(mouseX, mouseY, rows.size());
+        if (index < 0) {
+            return;
+        }
+        Row row = rows.get(index);
+        // Headings are labels, not choices.
+        if (row.binding == null) {
+            return;
+        }
+        callback.onKeyBindPicked(row.binding.getKeyDescription(), row.binding.getKeyCategory());
+        GuiStack.pop();
+    }
+
+    @Override
+    protected void actionPerformed(net.minecraft.client.gui.GuiButton button) {
+        if (button.id == ID_PRIMARY) {
+            onCancel();
         }
     }
 
     @Override
-    protected void mouseClicked(int mouseX, int mouseY, int button) {
-        super.mouseClicked(mouseX, mouseY, button);
-        searchField.mouseClicked(mouseX, mouseY, button);
-
-        if (button != 0) {
-            return;
-        }
-        int rows = rowsVisible();
-        for (int row = 0; row < rows && row + scrollRow < visible.size(); row++) {
-            int y = LIST_TOP + row * ROW_HEIGHT;
-            if (mouseY >= y && mouseY < y + ROW_HEIGHT
-                && mouseX >= this.width / 2 - 150
-                && mouseX <= this.width / 2 + 150) {
-                KeyBinding picked = visible.get(row + scrollRow);
-                callback.onKeyBindPicked(picked.getKeyDescription(), picked.getKeyCategory());
-                GuiStack.pop();
-                return;
-            }
-        }
-    }
-
-    @Override
-    protected void keyTyped(char typedChar, int keyCode) {
-        if (keyCode == 1) {
-            GuiStack.pop();
-            return;
-        }
+    protected boolean handleKey(char typedChar, int keyCode) {
         if (searchField.textboxKeyTyped(typedChar, keyCode)) {
-            refilter();
+            query = searchField.getText();
+            listScroll = 0;
+            rebuildRows();
+            list.scrollTo(0, rows.size());
+            return true;
         }
-    }
-
-    @Override
-    protected void actionPerformed(GuiButton button) {
-        if (button.id == 0) {
-            GuiStack.pop();
-        }
-    }
-
-    @Override
-    public void onGuiClosed() {
-        super.onGuiClosed();
-        Keyboard.enableRepeatEvents(false);
-    }
-
-    @Override
-    public boolean doesGuiPauseGame() {
         return false;
     }
 }

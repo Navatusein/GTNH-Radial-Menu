@@ -22,7 +22,9 @@ public class ActionField {
         /** Picked from the list of registered keybindings rather than typed. */
         KEYBIND_REF,
         /** Picked from the profile list. */
-        PROFILE_REF
+        PROFILE_REF,
+        /** Picked with the colour picker; stored as #RRGGBB, blank meaning "inherit". */
+        COLOR
     }
 
     public final String key;
@@ -36,6 +38,22 @@ public class ActionField {
 
     /** Allowed values, for {@link Kind#ENUM}. */
     public final List<String> options;
+
+    /**
+     * Translation key of the localized name of one enum value: {@code <labelKey>.<value>}.
+     *
+     * <p>
+     * Raw values like {@code dynamic} read as leftover data next to properly cased labels, so they are translated
+     * for display while the stored value stays lower case.
+     */
+    public String valueLabelKey(String value) {
+        return labelKey + "." + value;
+    }
+
+    /** Translation key of this field's tooltip. */
+    public String tooltipKey() {
+        return labelKey + ".tip";
+    }
 
     private ActionField(String key, String labelKey, Kind kind, String defaultValue, List<String> options) {
         this.key = key;
@@ -71,5 +89,9 @@ public class ActionField {
 
     public static ActionField profileRef(String key, String labelKey) {
         return new ActionField(key, labelKey, Kind.PROFILE_REF, "", null);
+    }
+
+    public static ActionField color(String key, String labelKey) {
+        return new ActionField(key, labelKey, Kind.COLOR, "", null);
     }
 }

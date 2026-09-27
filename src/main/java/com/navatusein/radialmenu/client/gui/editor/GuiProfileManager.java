@@ -4,14 +4,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.util.EnumChatFormatting;
 
-import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.ui.Ui;
+import com.navatusein.radialmenu.client.gui.ui.UiList;
+import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileStorage;
 
@@ -19,123 +20,85 @@ import com.navatusein.radialmenu.client.profile.ProfileStorage;
  * Lists the profiles on disk and manages them.
  *
  * <p>
- * Actions apply to the selected row rather than sitting on every row, which keeps the list readable when a player has
- * a dozen profiles and makes the destructive button easy to keep away from the rest.
+ * The list sits beside a column of actions that apply to whatever is selected, rather than repeating a row of buttons
+ * per profile. With a dozen profiles that keeps the list readable, and it keeps the destructive action in one known
+ * place instead of next to every row.
  */
-public class GuiProfileManager extends GuiScreen {
+public class GuiProfileManager extends UiScreen {
 
     private static final int ID_ACTIVATE = 1;
-    private static final int ID_NEW = 2;
-    private static final int ID_RENAME = 3;
-    private static final int ID_DUPLICATE = 4;
-    private static final int ID_DELETE = 5;
-    private static final int ID_RULES = 6;
-    private static final int ID_CLOSE = 7;
+    private static final int ID_RULES = 2;
+    private static final int ID_COLORS = 7;
+    private static final int ID_NEW = 3;
+    private static final int ID_RENAME = 4;
+    private static final int ID_DUPLICATE = 5;
+    private static final int ID_DELETE = 6;
 
-    private static final int ROW_HEIGHT = 14;
-    private static final int LIST_TOP = 40;
-
-    /** Three rows of 20px buttons with 4px gaps, plus a margin below the last one. */
-    private static final int BUTTON_BLOCK_HEIGHT = 74;
+    private static final int BUTTON_COLUMN = 104;
 
     private final List<String> profiles = new ArrayList<>();
 
     private String selected;
 
-    private int scrollRow;
+    private UiList list;
+
+    /** Kept across rebuilds, which make a fresh list, so selecting a row does not jump back to the top. */
+    private int listScroll;
 
     /** Set when an operation fails, so a refused name or a failed delete is visible instead of silent. */
     private String errorKey;
 
-    /**
-     * Button rebuilds wait for the next frame: GuiScreen.mouseClicked iterates buttonList by index and calls
-     * actionPerformed from inside that loop, so swapping the list mid-click makes it walk the new buttons too.
-     */
-    private boolean rebuildPending;
-
     @Override
-    public void initGui() {
-        super.initGui();
-        Keyboard.enableRepeatEvents(true);
-        reload();
+    protected String titleKey() {
+        return "radialmenu.profiles.title";
     }
 
-    private void reload() {
+    @Override
+    protected int panelWidth() {
+        return 360;
+    }
+
+    @Override
+    protected void buildControls() {
         profiles.clear();
         profiles.addAll(ProfileStorage.listProfileNames());
         if (selected == null || !profiles.contains(selected)) {
             selected = ProfileManager.activeName();
         }
-        rebuildButtons();
+
+        int listRight = contentRight() - BUTTON_COLUMN - Ui.GAP;
+        list = new UiList(contentLeft(), contentTop(), listRight, panelBottom - Ui.PAD, 13);
+        list.scrollTo(listScroll, profiles.size());
+
+        int x = listRight + Ui.GAP;
+        int y = contentTop();
+        boolean has = profiles.contains(selected);
+        boolean isActive = has && selected.equals(ProfileManager.activeName());
+
+        y = addAction(ID_ACTIVATE, "radialmenu.profiles.activate", x, y, has && !isActive);
+        y = addAction(ID_RULES, "radialmenu.profiles.rules", x, y, has);
+        y = addAction(ID_COLORS, "radialmenu.profiles.colors", x, y, has);
+        y += Ui.GAP;
+        y = addAction(ID_NEW, "radialmenu.profiles.new", x, y, true);
+        y = addAction(ID_RENAME, "radialmenu.profiles.rename", x, y, has);
+        y = addAction(ID_DUPLICATE, "radialmenu.profiles.duplicate", x, y, has);
+        y += Ui.GAP;
+        addAction(ID_DELETE, "radialmenu.profiles.delete", x, y, has);
+
+        addBottomBar("gui.done", null, null);
     }
 
-    private void rebuildButtons() {
-        this.buttonList.clear();
-
-        int left = this.width / 2 - 154;
-        // Laid out upwards from the bottom edge: buttons are 20 tall, so each row sits 24 above the next.
-        int bottom = this.height - BUTTON_BLOCK_HEIGHT;
-        boolean hasSelection = selected != null && profiles.contains(selected);
-        boolean selectionIsActive = hasSelection && selected.equals(ProfileManager.activeName());
-
-        GuiButton activate = new GuiButton(
-            ID_ACTIVATE,
-            left,
-            bottom,
-            100,
-            20,
-            I18n.format("radialmenu.profiles.activate"));
-        activate.enabled = hasSelection && !selectionIsActive;
-        this.buttonList.add(activate);
-
-        GuiButton rules = new GuiButton(
-            ID_RULES,
-            left + 104,
-            bottom,
-            100,
-            20,
-            I18n.format("radialmenu.profiles.rules"));
-        rules.enabled = hasSelection;
-        this.buttonList.add(rules);
-
-        GuiButton duplicate = new GuiButton(
-            ID_DUPLICATE,
-            left + 208,
-            bottom,
-            100,
-            20,
-            I18n.format("radialmenu.profiles.duplicate"));
-        duplicate.enabled = hasSelection;
-        this.buttonList.add(duplicate);
-
-        this.buttonList.add(new GuiButton(ID_NEW, left, bottom + 24, 100, 20, I18n.format("radialmenu.profiles.new")));
-
-        GuiButton rename = new GuiButton(
-            ID_RENAME,
-            left + 104,
-            bottom + 24,
-            100,
-            20,
-            I18n.format("radialmenu.profiles.rename"));
-        rename.enabled = hasSelection;
-        this.buttonList.add(rename);
-
-        GuiButton delete = new GuiButton(
-            ID_DELETE,
-            left + 208,
-            bottom + 24,
-            100,
-            20,
-            I18n.format("radialmenu.profiles.delete"));
-        delete.enabled = hasSelection;
-        this.buttonList.add(delete);
-
-        this.buttonList
-            .add(new GuiButton(ID_CLOSE, this.width / 2 - 100, bottom + 48, 200, 20, I18n.format("gui.done")));
+    private int addAction(int id, String labelKey, int x, int y, boolean enabled) {
+        GuiButton button = new GuiButton(id, x, y, BUTTON_COLUMN, Ui.ROW, I18n.format(labelKey));
+        button.enabled = enabled;
+        this.buttonList.add(button);
+        tooltip(id, describe(labelKey + ".tip"));
+        return y + Ui.STEP;
     }
 
-    private int rowsVisible() {
-        return Math.max(1, (this.height - LIST_TOP - BUTTON_BLOCK_HEIGHT - 12) / ROW_HEIGHT);
+    private static String describe(String key) {
+        String translated = I18n.format(key);
+        return translated.equals(key) ? null : translated;
     }
 
     @Override
@@ -143,11 +106,23 @@ public class GuiProfileManager extends GuiScreen {
         errorKey = null;
 
         switch (button.id) {
+            case ID_PRIMARY:
+                GuiStack.closeAll();
+                return;
+
             case ID_ACTIVATE:
                 if (!ProfileManager.switchTo(selected)) {
                     errorKey = "radialmenu.profiles.error.load";
                 }
-                rebuildPending = true;
+                requestRebuild();
+                return;
+
+            case ID_RULES:
+                GuiStack.push(new GuiAutoBindRules(selected));
+                return;
+
+            case ID_COLORS:
+                GuiStack.push(new GuiProfileColors(selected));
                 return;
 
             case ID_NEW:
@@ -208,62 +183,48 @@ public class GuiProfileManager extends GuiScreen {
                 }));
                 return;
 
-            case ID_RULES:
-                GuiStack.push(new GuiAutoBindRules(selected));
-                return;
-
-            case ID_CLOSE:
-                GuiStack.closeAll();
-                return;
-
             default:
                 break;
         }
     }
 
     @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        if (rebuildPending) {
-            rebuildPending = false;
-            reload();
-        }
+    protected void drawContent(int mouseX, int mouseY, float partialTicks) {
+        list.drawFrame();
 
-        this.drawDefaultBackground();
-        this.drawCenteredString(
-            this.fontRendererObj,
-            I18n.format("radialmenu.profiles.title"),
-            this.width / 2,
-            12,
-            0xFFFFFF);
-
-        int left = this.width / 2 - 154;
-        int rows = rowsVisible();
         String activeName = ProfileManager.activeName();
+        int hovered = list.itemAt(mouseX, mouseY, profiles.size());
 
-        for (int row = 0; row < rows && row + scrollRow < profiles.size(); row++) {
-            String name = profiles.get(row + scrollRow);
-            int y = LIST_TOP + row * ROW_HEIGHT;
+        for (int row = 0; row < list.rowsVisible() && row + list.firstRow() < profiles.size(); row++) {
+            int index = row + list.firstRow();
+            String name = profiles.get(index);
 
-            if (name.equals(selected)) {
-                drawRect(left - 2, y - 2, left + 310, y + ROW_HEIGHT - 3, 0x60FFFFFF);
+            list.drawRowBackground(row, name.equals(selected), index == hovered);
+
+            boolean active = name.equals(activeName);
+            String label = Ui.fit(name, list.textWidth() - (active ? 42 : 0));
+            this.fontRendererObj
+                .drawString(label, list.textLeft(), list.rowTop(row) + 3, active ? Ui.TEXT_ACTIVE : Ui.TEXT);
+
+            if (active) {
+                String marker = I18n.format("radialmenu.profiles.activeMarker");
+                this.fontRendererObj.drawString(
+                    EnumChatFormatting.DARK_GREEN + marker,
+                    list.right - 5 - this.fontRendererObj.getStringWidth(marker),
+                    list.rowTop(row) + 3,
+                    Ui.TEXT);
             }
-
-            String label = name.equals(activeName)
-                ? EnumChatFormatting.GREEN + name
-                    + " "
-                    + EnumChatFormatting.DARK_GREEN
-                    + I18n.format("radialmenu.profiles.activeMarker")
-                : name;
-            this.fontRendererObj.drawString(label, left, y + 1, 0xFFFFFF);
         }
 
-        if (profiles.size() > rows) {
+        list.drawScrollbar(profiles.size());
+
+        if (profiles.isEmpty()) {
             this.drawCenteredString(
                 this.fontRendererObj,
-                (scrollRow + 1) + "-" + Math.min(profiles.size(), scrollRow + rows) + " / " + profiles.size(),
-                this.width / 2,
-                this.height - BUTTON_BLOCK_HEIGHT - 10,
-                0x808080);
+                EnumChatFormatting.GRAY + I18n.format("radialmenu.profiles.empty"),
+                (list.left + list.right) / 2,
+                list.top + 8,
+                Ui.TEXT);
         }
 
         if (errorKey != null) {
@@ -271,21 +232,16 @@ public class GuiProfileManager extends GuiScreen {
                 this.fontRendererObj,
                 EnumChatFormatting.RED + I18n.format(errorKey),
                 this.width / 2,
-                26,
-                0xFFFFFF);
+                panelBottom - 12,
+                Ui.TEXT);
         }
-
-        super.drawScreen(mouseX, mouseY, partialTicks);
     }
 
     @Override
     public void handleMouseInput() {
         super.handleMouseInput();
-        int wheel = Mouse.getEventDWheel();
-        if (wheel != 0) {
-            int maxScroll = Math.max(0, profiles.size() - rowsVisible());
-            scrollRow = Math.max(0, Math.min(maxScroll, scrollRow + (wheel > 0 ? -1 : 1)));
-        }
+        list.scroll(Mouse.getEventDWheel(), profiles.size());
+        listScroll = list.firstRow();
     }
 
     @Override
@@ -294,34 +250,16 @@ public class GuiProfileManager extends GuiScreen {
         if (button != 0) {
             return;
         }
-        int left = this.width / 2 - 154;
-        int rows = rowsVisible();
-        for (int row = 0; row < rows && row + scrollRow < profiles.size(); row++) {
-            int y = LIST_TOP + row * ROW_HEIGHT;
-            if (mouseY >= y - 2 && mouseY < y + ROW_HEIGHT - 3 && mouseX >= left - 2 && mouseX <= left + 310) {
-                selected = profiles.get(row + scrollRow);
-                errorKey = null;
-                rebuildPending = true;
-                return;
-            }
+        int index = list.itemAt(mouseX, mouseY, profiles.size());
+        if (index >= 0) {
+            selected = profiles.get(index);
+            errorKey = null;
+            requestRebuild();
         }
     }
 
     @Override
-    protected void keyTyped(char typedChar, int keyCode) {
-        if (keyCode == Keyboard.KEY_ESCAPE) {
-            GuiStack.closeAll();
-        }
-    }
-
-    @Override
-    public void onGuiClosed() {
-        super.onGuiClosed();
-        Keyboard.enableRepeatEvents(false);
-    }
-
-    @Override
-    public boolean doesGuiPauseGame() {
-        return false;
+    protected void onCancel() {
+        GuiStack.closeAll();
     }
 }

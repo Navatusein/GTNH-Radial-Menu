@@ -16,6 +16,15 @@ public class Profile {
     /** Rules that make this profile activate automatically. Empty means manual switching only. */
     public List<ProfileBinding> bindings;
 
+    /**
+     * Colours for every menu in this profile, unless a menu overrides them.
+     *
+     * <p>
+     * Null inherits the mod's config, which is where the defaults live - so a profile can have a look of its own
+     * without every submenu repeating it.
+     */
+    public MenuStyle style;
+
     public MenuNode root;
 
     public static Profile empty(String name) {

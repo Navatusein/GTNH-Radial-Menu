@@ -113,18 +113,31 @@ public final class ProfileManager {
         if (clean.equals(oldName)) {
             return true;
         }
-        if (ProfileStorage.exists(clean)) {
+
+        // Changing only the capitalisation is a rename of the same profile, not a collision with another one -
+        // which is what the plain existence check saw on a case-insensitive filesystem.
+        boolean sameFile = ProfileStorage.isSameFile(oldName, clean);
+        if (!sameFile && ProfileStorage.exists(clean)) {
             return false;
         }
+
         Profile loaded = ProfileStorage.loadProfile(oldName);
         if (loaded == null) {
             return false;
         }
         loaded.name = clean;
-        if (!ProfileStorage.saveProfile(loaded)) {
-            return false;
+
+        if (sameFile) {
+            if (!ProfileStorage.renameFile(oldName, clean)) {
+                return false;
+            }
+            ProfileStorage.saveProfile(loaded);
+        } else {
+            if (!ProfileStorage.saveProfile(loaded)) {
+                return false;
+            }
+            ProfileStorage.deleteProfile(oldName);
         }
-        ProfileStorage.deleteProfile(oldName);
 
         if (oldName.equals(settings.activeProfile)) {
             switchTo(clean);
