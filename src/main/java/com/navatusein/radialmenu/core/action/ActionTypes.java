@@ -72,6 +72,21 @@ public final class ActionTypes {
         return id != null && TYPES.containsKey(id);
     }
 
+    /**
+     * Whether an action has the parameters its type needs.
+     *
+     * <p>
+     * An unregistered type is reported complete: the executor lookup is what should complain about it, and a warning
+     * about a missing parameter of a type nobody knows would only be misleading.
+     */
+    public static boolean isComplete(ActionSpec spec) {
+        if (spec == null || spec.type == null) {
+            return false;
+        }
+        ActionType type = get(spec.type);
+        return type == null || type.isComplete(spec);
+    }
+
     public static List<ActionType> all() {
         return Collections.unmodifiableList(new ArrayList<>(TYPES.values()));
     }
@@ -87,7 +102,8 @@ public final class ActionTypes {
                 KEYBIND,
                 "radialmenu.action.keybind",
                 false,
-                ActionField.keybindRef(PARAM_BINDING, "radialmenu.action.keybind.binding"),
+                ActionField.keybindRef(PARAM_BINDING, "radialmenu.action.keybind.binding")
+                    .required(),
                 ActionField.enumeration(PARAM_MODE, "radialmenu.action.keybind.mode", "tap", "tap", "toggle", "hold"),
                 ActionField.integer(PARAM_HOLD_TICKS, "radialmenu.action.keybind.holdTicks", 20)));
 
@@ -103,7 +119,8 @@ public final class ActionTypes {
                 COMMAND,
                 "radialmenu.action.command",
                 false,
-                ActionField.multiline(PARAM_COMMAND, "radialmenu.action.command.text", ""),
+                ActionField.multiline(PARAM_COMMAND, "radialmenu.action.command.text", "")
+                    .required(),
                 ActionField.integer(PARAM_DELAY_TICKS, "radialmenu.action.command.delayTicks", 0),
                 ActionField.bool(PARAM_CYCLE, "radialmenu.action.command.cycle", false)));
 

@@ -42,6 +42,23 @@ public class ActionType {
         }
     }
 
+    /**
+     * Whether the spec carries everything this type cannot run without.
+     *
+     * <p>
+     * A half-filled action is a normal thing to find: the editor saves whatever is on screen, and a step added to a
+     * chain and then left alone has no keybinding yet. Callers use this to pass over it rather than to reject it -
+     * the entry stays in the list, visibly unfinished, and simply does nothing when the chain runs.
+     */
+    public boolean isComplete(ActionSpec spec) {
+        for (ActionField field : fields) {
+            if (field.isMissingFrom(spec)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     public ActionSpec newSpec() {
         ActionSpec spec = new ActionSpec(id);
         applyDefaults(spec);
