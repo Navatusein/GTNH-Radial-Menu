@@ -63,15 +63,15 @@ public class GuiAutoBindRules extends UiScreen {
         return 360;
     }
 
+    @Override
+    protected boolean framedViewport() {
+        return true;
+    }
+
     /** Row for the two add buttons, which stay put rather than scrolling away with the rules. */
     @Override
     protected int footerHeight() {
         return Ui.ROW + Ui.GAP;
-    }
-
-    @Override
-    protected boolean snapPanelToRows() {
-        return true;
     }
 
     @Override
@@ -127,7 +127,7 @@ public class GuiAutoBindRules extends UiScreen {
 
         int footerY = panelBottom - Ui.PAD - Ui.ROW;
         int half = (contentWidth() - Ui.GAP) / 2;
-        // ID_PRIMARY and above are exempt from the scroll visibility check, so the footer keeps its place.
+        // Marked as footer below, which is what exempts them from the scroll visibility check.
         GuiButton add = new GuiButton(ID_ADD, left, footerY, half, Ui.ROW, I18n.format("radialmenu.rules.add"));
         GuiButton useCurrent = new GuiButton(
             ID_USE_CURRENT,
@@ -260,6 +260,10 @@ public class GuiAutoBindRules extends UiScreen {
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int button) {
         super.mouseClicked(mouseX, mouseY, button);
+        // A field clipped at the panel edge still answers to clicks on the part that was cut away.
+        if (!isInsideViewport(mouseY)) {
+            return;
+        }
         for (GuiTextField field : valueFields) {
             field.mouseClicked(mouseX, mouseY, button);
         }

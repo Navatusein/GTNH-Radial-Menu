@@ -98,7 +98,7 @@ public class GuiColorPicker extends UiScreen {
 
     @Override
     protected int panelHeightHint() {
-        return 14 + SQUARE + Ui.GAP + 2 * (SWATCH + 2) + Ui.PAD * 2;
+        return SQUARE + Ui.GAP + 2 * (SWATCH + 2);
     }
 
     @Override

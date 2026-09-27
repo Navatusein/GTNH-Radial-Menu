@@ -36,7 +36,7 @@ public class GuiConfirm extends UiScreen {
 
     @Override
     protected int panelHeightHint() {
-        return 80;
+        return Ui.STEP * 2;
     }
 
     @Override
