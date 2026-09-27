@@ -4,44 +4,118 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Minecraft 1.7.10 Forge mod built from the GTNewHorizons [ExampleMod1.7.10](https://github.com/GTNewHorizons/ExampleMod1.7.10) template. The working directory is named `GTNH-Radial-Menu`, but the checkout is still the unmodified template: every placeholder (`MyMod` / `mymodid` / `com.myname.mymodid`) is intact, and there is no git repository yet.
+**RadialMenu** — a client-side Minecraft 1.7.10 Forge mod (GTNH ecosystem) built from the GTNewHorizons
+[ExampleMod1.7.10](https://github.com/GTNewHorizons/ExampleMod1.7.10) template. Hold a key, get a radial menu, bind
+actions to its slots.
 
-Before real work starts, the rename pass touches: `gradle.properties` (`modName`, `modId`, `modGroup`, `generateGradleTokenClass`), the package dir `src/main/java/com/myname/mymodid/`, `MyMod.java` (class name, `MODID`, `@Mod` name, both `@SidedProxy` class-name strings — these are string literals no refactor tool will catch), `src/main/resources/mcmod.info`, and `LICENSE-template` → `LICENSE`. `git init` is also still pending, and the build derives the mod version from git tags, so until then builds are unversioned.
+The point of the mod: **press a keybinding that has no physical key assigned**. In a pack with dozens of mods there
+aren't enough keys to go around, so actions live on menu slots instead of in the controls screen. Everything else —
+submenus, profiles, the editor — exists to serve that.
+
+Client-only by design: no packets, no server component, works on unmodified servers.
 
 ## Commands
 
 ```bash
-./gradlew setupDecompWorkspace   # one-time: decompile/deobfuscate MC, needed before anything else
-./gradlew build                  # compile + test + jar
-./gradlew runClient              # launch dev client (logs in as `developmentEnvironmentUserName`)
-./gradlew runServer              # launch dev server
-./gradlew spotlessApply          # format; CI fails on spotlessCheck
-./gradlew test --tests '*SomeTest.someMethod'   # single test
+./gradlew build                  # compile + test + spotless + jar
+./gradlew runClient              # dev client
+./gradlew test                   # unit tests (core/ only)
+./gradlew spotlessApply          # format; the build fails on violations
+./gradlew test --tests '*RadialGeometryTest.deadZoneSelectsNothing'
 ```
 
-On Windows use `gradlew.bat`; the Bash tool's `./gradlew` works too.
+**Toolchain gotcha**: the build needs JDK 25. Gradle's auto-provisioning is broken here — foojay serves a JDK **21**
+archive for a 25 request and Gradle rejects it. A real JDK 25 lives at `D:\tools\jdk25` and is registered in
+`~/.gradle/gradle.properties` via `org.gradle.java.installations.paths` (forward slashes — backslashes are escapes in
+a properties file). On a fresh machine that file has to be recreated.
 
-## Build system
+## Architecture
 
-`build.gradle.kts` is two lines — all build logic lives in the GTNH convention plugins (`gtnhsettingsconvention` in `settings.gradle.kts`, `gtnhconvention` in `build.gradle.kts`), which wrap RetroFuturaGradle. **Never add logic to `build.gradle.kts` or `settings.gradle.kts`**; the whole point of the template is that they stay replaceable on update. Instead:
+### `core/` has no Minecraft imports. Keep it that way.
 
-- `gradle.properties` — the actual configuration surface (mod identity, mixins, shadowing, publishing, AT file). Toggling features here is how you enable them.
-- `dependencies.gradle` — dependencies. Header comment documents the custom configurations (`devOnlyNonPublishable`, `runtimeOnlyNonPublishable`, `shadowImplementation`, `rfg.deobf(...)` for obfuscated jars).
-- `repositories.gradle` — extra repos.
-- `addon.gradle[.kts]` / `addon.late.gradle[.kts]` — custom build logic, auto-applied if present. `addon[.late].local.gradle[.kts]` is gitignored, for uncommitted local tweaks (extra JVM args, etc.).
+`src/main/java/com/navatusein/radialmenu/core/` holds the menu tree, profiles, action *data*, JSON codec and the
+angle maths. It is unit tested on its own and is the layer that would survive a port to 1.12+/modern. Verify with:
 
-Gradle configuration cache and parallel execution are on, so any `addon.gradle` logic must be configuration-cache compatible.
+```bash
+grep -r "net.minecraft" src/main/java/com/navatusein/radialmenu/core/   # must be empty
+```
 
-## Things that bite
+### Actions are data, not behaviour
 
-- **`Tags.VERSION` has no source file.** `generateGradleTokenClass` in `gradle.properties` makes the build emit `<modGroup>.Tags` with a `VERSION` constant from the git-tag-derived version. `MyMod.java` and `CommonProxy.java` reference it, so the IDE shows unresolved-symbol errors until the first `./gradlew build` (or `setupDecompWorkspace`). Rename `generateGradleTokenClass` in lockstep with `modGroup`.
-- **Java 25 toolchain, Java 8 target.** `.java-version` is 25 and `enableModernJavaSyntax = jabel` lets you write modern *syntax* (var, switch expressions, records-adjacent sugar), but it compiles to Java 8 bytecode running on the MC 1.7.10 JVM — **Java 9+ APIs are not available at runtime** and will fail late, not at compile time.
-- **Formatting is not local.** Spotless config comes from the GTNH blowdryer share (`gtnh.settings.blowdryerTag` in `gradle.properties`, cached in `gtnhShared/`). Don't hand-tune the eclipse format; run `spotlessApply`. The `json` block ratchets from `origin/master`, so it only formats files changed against that ref.
-- **Mixins are off** (`usesMixins = false`). Enabling them is a `gradle.properties` change (`usesMixins`, `mixinsPackage`, plus `mixinPlugin`/`coreModClass` for the Early/Late variant) — dependencies are then wired in automatically. The README links example commits for the three registration styles; GTNH `IMixins` is the recommended one.
-- CI (`.github/workflows/build-and-test.yml`) delegates to `GTNewHorizons/GTNH-Actions-Workflows`; it builds and runs a server-startup smoke test, so a crash on dedicated-server init fails the build. Keep client-only code behind `ClientProxy`.
+`ActionSpec` is `{type, params: Map<String,String>, steps: List<ActionSpec>}`. Executors (`client/action/`) are
+registered by type id and are the only place Minecraft enters the pipeline. `ActionTypes` holds editor-facing field
+descriptors, and `GuiSlotEditor` builds its widgets from them — so **a new action type needs a descriptor and an
+executor, and no GUI code**. `steps` is the reserved hook for action chains; it is parsed today, executed from phase 2.
 
-## Mod structure
+MineMenu's equivalent is a closed `enum` with a bespoke screen per type. Don't reintroduce that shape.
 
-Standard Forge 1.7.10 sided-proxy layout: `MyMod` is the `@Mod` entry point holding `MODID`, a log4j `Logger`, and a `@SidedProxy` field; each lifecycle event (`preInit`/`init`/`postInit`/`serverStarting`) just delegates to the proxy. `CommonProxy` holds shared logic, `ClientProxy extends CommonProxy` overrides for client-only concerns (renderers, keybinds, GUI). `Config` reads a Forge `Configuration` file in `preInit`.
+### One node type for the tree
 
-For a radial-menu mod this means: keybind/GUI/rendering registration belongs in `ClientProxy` only, and any server interaction needs an explicit packet channel (none is set up yet).
+`MenuNode.children != null` means category; `action != null` means leaf. A `null` element inside `children` is an
+empty slot, which only happens under `SlotLayout.Mode.FIXED`. `normalize()` repairs hand-edited files rather than
+throwing — a broken profile must never stop the client from starting.
+
+## The keybind injection mechanism
+
+This is the crux, and it is verified against the decompiled 1.7.10 source, not assumed:
+
+- `KeyBinding.setKeyBindState` and `KeyBinding.onTick` both start with `if (keyCode != 0)` and look the binding up in
+  a static map keyed by key code. **An unbound binding has key code 0 and is unreachable through them** — hence the
+  mixin accessor writing the private fields directly.
+- Two fields matter, because mods read state two ways: `pressed` backs `getIsKeyPressed()` (movement, holds),
+  `pressTime` backs `isPressed()` (what AE2, Draconic Evolution and AdventureBackpack2 all use).
+- Those mods read it inside an `InputEvent.KeyInputEvent` handler **on the FML bus**, so bumping `pressTime` is not
+  enough — the event must be posted too, or their handler never runs.
+- `pressTime` is bumped **once per press**, never per tick. Vanilla increments it from the keyboard event only;
+  per-tick bumping makes `isPressed()` fire repeatedly and, e.g., flickers a flight toggle on and off.
+- The private `unpressKey()` is exactly `{pressTime = 0; pressed = false;}`, so `KeyInjector.release()` writing both
+  fields is equivalent — no `@Invoker` needed.
+- **Known gap**: `Minecraft.runTick` checks `keyBindTogglePerspective` and `keyBindSmoothCamera` *inside* the
+  `while (Keyboard.next())` loop, so vanilla only asks about them when a real key event arrives — a synthetic press is
+  never seen. Every other vanilla binding (`keyBindInventory`, `keyBindDrop`, `keyBindChat`, hotbar slots) is checked
+  outside the loop and works fine. `VanillaKeyEffects` applies those two directly instead. A mod that polls
+  `Keyboard.isKeyDown(kb.getKeyCode())` rather than its own binding object is likewise unreachable, permanently.
+
+Mixin accessor names are **MCP** (`pressed`, `pressTime`); the refmap remaps them to SRG. Writing SRG names in source
+breaks the dev environment. Check `build/tmp/mixins/mixins.radialmenu.refmap.json` to confirm a mapping resolved.
+
+`Mixins.java` lists class names **relative to** the `package` in `mixins.radialmenu.early.json`. Both that file and
+the plain `mixins.radialmenu.json` must exist — the build registers the latter in the manifest whether you use it or
+not, and a missing file aborts mixin init at launch.
+
+## Wheel lifecycle — the ordering is load-bearing
+
+1. `ClientTickEvent(START)` polls the open key from hardware (`Keyboard.isKeyDown`, or `Mouse.isButtonDown(code+100)`
+   — mouse buttons are negative key codes offset by −100). Polling, not `isPressed()`, because hold-to-open needs
+   state and `isPressed()` consumes the press.
+2. Rising edge opens `GuiRadialWheel`.
+3. Release → resolve the hovered slot → `displayGuiScreen(null)` → **queue the action for the next tick**.
+4. Next tick → executor → `KeyInjector`.
+
+**Close before injecting.** The alternative — keeping the wheel up and temporarily faking `currentScreen = null` —
+breaks whenever the receiving handler opens a GUI of its own (AdventureBackpack2 opens the backpack), because
+restoring `currentScreen` afterwards clobbers it. Closing first also genuinely restores `inGameHasFocus`, which
+AdventureBackpack2 checks before reacting at all.
+
+Two screen flags matter: `doesGuiPauseGame()` must return false, and `allowUserInput` must be set — 1.7.10 gates its
+entire keyboard/mouse block on `currentScreen == null || currentScreen.allowUserInput`, so without it the player
+stops moving. Opening any screen still runs `unPressAllKeys()` once, so a key already held goes dead; `HeldKeyResync`
+re-applies physical state right after the screen becomes current.
+
+## Storage
+
+Menus live in `<game folder>/RadialMenu/`, not `config/` — one file per profile under `profiles/`, plus
+`settings.json` and `icons/`. Auto-bind rules live *inside* each profile so copying the file carries them along.
+Only the scalar look-and-feel settings use GTNHLib `@Config` in `config/RadialMenu/`.
+
+Gson is 2.2.4 in 1.7.10, which **ignores `@SerializedName` on enum constants** — `LowercaseEnumAdapterFactory`
+handles enum casing instead. Don't reach for the annotation.
+
+## Status
+
+Working: template setup, mixin accessor, `core/` + tests, profiles with auto-bind, wheel rendering and lifecycle,
+keybind action (tap/toggle/hold), profile-switch action, slot editor, keybind picker, item icon picker,
+`/radialmenu` command.
+
+Not built yet: profile-management GUI, the bundled Phosphor sprite atlas (`IconSpec.Kind.SPRITE` and `FILE` currently
+draw a tinted placeholder), command actions, action chains, inventory moves, backpack integration.
