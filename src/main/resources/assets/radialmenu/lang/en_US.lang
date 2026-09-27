@@ -1,0 +1,25 @@
+key.radialmenu.open=Open radial menu
+key.radialmenu.cycleProfile=Next profile
+
+radialmenu.config.general=RadialMenu
+
+radialmenu.action.keybind=Press keybinding
+radialmenu.action.keybind.binding=Keybinding
+radialmenu.action.keybind.category=Category
+radialmenu.action.keybind.mode=Mode
+radialmenu.action.keybind.holdTicks=Hold for (ticks)
+radialmenu.action.profileSwitch=Switch profile
+radialmenu.action.profileSwitch.profile=Profile
+
+radialmenu.editor.slot=Slot %d
+radialmenu.editor.title=Title
+radialmenu.editor.icon=Icon
+radialmenu.editor.keepOpen=Keep menu open
+radialmenu.editor.isAction=This slot runs an action
+radialmenu.editor.isCategory=This slot is a submenu
+radialmenu.editor.actionType=Action
+radialmenu.editor.save=Save
+radialmenu.editor.delete=Delete
+radialmenu.editor.pickKeybind=Pick a keybinding
+radialmenu.editor.pickIcon=Pick an icon
+radialmenu.editor.unbound=not bound
