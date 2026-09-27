@@ -168,6 +168,11 @@ newer radial-menu mods use does not transfer. `tools/GenerateIconAtlas.java` ren
 
 Draw sprites with explicit texture coordinates; `Gui.drawTexturedModalRect` assumes a 256×256 sheet.
 
+The ring is drawn as full-width sectors with a line on each boundary and an edge at each radius. It used to draw the
+sectors a couple of degrees narrow instead, leaving wedges of bare world between them — which also made the wheel lie
+about itself, since the angle a click resolves to never knew about the gaps and aiming at one still picked a
+neighbour. The edges are drawn inwards from their radius so turning the lines on cannot change the wheel's size.
+
 **Colours inherit: menu → profile → mod config.** `core/Colors` owns the parsing, because it was duplicated in the
 renderer and in `IconSpec` and had drifted. The colour picker writes `#RRGGBB` while the config writes
 `0xAARRGGBB`, so a six-digit value read as eight is alpha zero — that is how a chosen ring colour once turned the
@@ -176,6 +181,10 @@ override has none.
 
 Icon tints distinguish two kinds of blank: **null keeps the artwork's own colours** (the PNG tab's checkbox), while
 **empty means inherit**. Collapsing both to white is the bug to avoid.
+
+`MenuStyle.of` takes every colour explicitly and has no shorter overload. It briefly had two that differed only in
+which optional colour the third argument meant — the types matched either way round, so the compiler would have said
+nothing while the colours quietly swapped.
 
 ## Profiles
 

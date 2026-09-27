@@ -63,6 +63,18 @@ public class RadialMenuConfig {
     @Config.Order(9)
     public static String iconColor;
 
+    @Config.Comment("Colour of the lines on the wheel - sector dividers and ring edges, 0xAARRGGBB. "
+        + "Fully transparent hides them.")
+    @Config.DefaultString("0x60FFFFFF")
+    @Config.Order(10)
+    public static String borderColor;
+
+    @Config.Comment("Thickness of those lines, in GUI pixels.")
+    @Config.DefaultInt(1)
+    @Config.RangeInt(min = 1, max = 6)
+    @Config.Order(11)
+    public static int borderWidth;
+
     /** Guards against a hand-edited config where the hole is bigger than the ring. */
     public static int effectiveInnerRadius() {
         return Math.min(innerRadius, outerRadius - 8);

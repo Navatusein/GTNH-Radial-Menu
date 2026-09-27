@@ -55,6 +55,7 @@ public final class ActionTypes {
     public static final String PARAM_SLOT_COUNT = "slots";
     public static final String PARAM_RING_COLOR = "ringColor";
     public static final String PARAM_HIGHLIGHT_COLOR = "highlightColor";
+    public static final String PARAM_BORDER_COLOR = "borderColor";
 
     private static final Map<String, ActionType> TYPES = new LinkedHashMap<>();
 
@@ -132,7 +133,8 @@ public final class ActionTypes {
                 ActionField.enumeration(PARAM_SLOT_MODE, "radialmenu.action.submenu.mode", "fixed", "fixed", "dynamic"),
                 ActionField.integer(PARAM_SLOT_COUNT, "radialmenu.action.submenu.slots", 8),
                 ActionField.color(PARAM_RING_COLOR, "radialmenu.action.submenu.ringColor"),
-                ActionField.color(PARAM_HIGHLIGHT_COLOR, "radialmenu.action.submenu.highlightColor")));
+                ActionField.color(PARAM_HIGHLIGHT_COLOR, "radialmenu.action.submenu.highlightColor"),
+                ActionField.color(PARAM_BORDER_COLOR, "radialmenu.action.submenu.borderColor")));
 
         register(
             new ActionType(

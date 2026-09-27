@@ -26,8 +26,6 @@ import com.navatusein.radialmenu.core.model.MenuStyle;
  */
 public final class WheelRenderer {
 
-    private static final int GAP_DEGREES = 2;
-
     private WheelRenderer() {}
 
     public static void drawWheel(MenuNode menu, int slotCount, int centerX, int centerY, int hoveredSlot,
@@ -54,6 +52,10 @@ public final class WheelRenderer {
         highlightColor = Colors.over(profileStyle == null ? null : profileStyle.highlightColor, highlightColor);
         highlightColor = Colors.over(style == null ? null : style.highlightColor, highlightColor);
 
+        int borderColor = Colors.parseArgb(RadialMenuConfig.borderColor, 0x60FFFFFF);
+        borderColor = Colors.over(profileStyle == null ? null : profileStyle.borderColor, borderColor);
+        borderColor = Colors.over(style == null ? null : style.borderColor, borderColor);
+
         if (editMode) {
             // Unmistakably a different mode: the ring takes on the edit tint rather than relying on a label alone.
             ringColor = blend(ringColor, 0xFFAA00, 0.25F);
@@ -79,9 +81,11 @@ public final class WheelRenderer {
                 // memorised never move.
                 color = fade(color, 0.35F);
             }
-            double start = RadialGeometry.slotCenterAngle(slot, slotCount, 0.0) - span / 2.0 + GAP_DEGREES / 2.0;
-            drawSector(centerX, centerY, inner, outer, start, span - GAP_DEGREES, color);
+            double start = RadialGeometry.slotCenterAngle(slot, slotCount, 0.0) - span / 2.0;
+            drawSector(centerX, centerY, inner, outer, start, span, color);
         }
+
+        drawBorders(centerX, centerY, inner, outer, slotCount, borderColor);
 
         GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
         GL11.glDisable(GL11.GL_BLEND);
@@ -130,6 +134,82 @@ public final class WheelRenderer {
             tessellator.addVertex(centerX + sinTo * innerRadius, centerY - cosTo * innerRadius, 0.0);
         }
         tessellator.draw();
+    }
+
+    /**
+     * The lines that give the ring its shape: a divider on each boundary between sectors, and an edge at each
+     * radius.
+     *
+     * <p>
+     * The sectors used to be drawn a couple of degrees narrow instead of divided, which left wedges of bare world
+     * between them. That also made the ring lie about itself: the angle a click resolves to never knew about the
+     * gaps, so aiming at one still picked whichever sector it sat between.
+     *
+     * <p>
+     * Both edges are drawn inwards from their radius, so turning the lines on cannot change how big the wheel is.
+     */
+    private static void drawBorders(int centerX, int centerY, double inner, double outer, int slotCount, int argb) {
+        if ((argb >>> 24) == 0) {
+            return;
+        }
+
+        double width = Math.max(1, RadialMenuConfig.borderWidth);
+
+        GL11.glColor4f(
+            ((argb >> 16) & 0xFF) / 255.0F,
+            ((argb >> 8) & 0xFF) / 255.0F,
+            (argb & 0xFF) / 255.0F,
+            ((argb >>> 24) & 0xFF) / 255.0F);
+
+        Tessellator tessellator = Tessellator.instance;
+        tessellator.startDrawingQuads();
+
+        addRing(tessellator, centerX, centerY, outer - width, outer);
+        addRing(tessellator, centerX, centerY, inner, inner + width);
+
+        // A single boundary on a one-entry wheel is a line across an otherwise unbroken ring, dividing nothing.
+        if (slotCount >= 2) {
+            addDividers(tessellator, centerX, centerY, inner, outer, slotCount, width / 2.0);
+        }
+        tessellator.draw();
+    }
+
+    private static void addRing(Tessellator tessellator, int centerX, int centerY, double from, double to) {
+        int segments = RadialGeometry.arcSegments(360.0);
+        for (int i = 0; i < segments; i++) {
+            double a = Math.toRadians(360.0 * i / segments);
+            double b = Math.toRadians(360.0 * (i + 1) / segments);
+
+            double sinA = Math.sin(a);
+            double cosA = Math.cos(a);
+            double sinB = Math.sin(b);
+            double cosB = Math.cos(b);
+
+            tessellator.addVertex(centerX + sinA * from, centerY - cosA * from, 0.0);
+            tessellator.addVertex(centerX + sinA * to, centerY - cosA * to, 0.0);
+            tessellator.addVertex(centerX + sinB * to, centerY - cosB * to, 0.0);
+            tessellator.addVertex(centerX + sinB * from, centerY - cosB * from, 0.0);
+        }
+    }
+
+    private static void addDividers(Tessellator tessellator, int centerX, int centerY, double inner, double outer,
+        int slotCount, double half) {
+        double span = RadialGeometry.sectorSpan(slotCount);
+        for (int slot = 0; slot < slotCount; slot++) {
+            double angle = Math.toRadians(RadialGeometry.slotCenterAngle(slot, slotCount, 0.0) - span / 2.0);
+            double sin = Math.sin(angle);
+            double cos = Math.cos(angle);
+
+            // Across the boundary rather than around it, so the line keeps one thickness at either radius instead
+            // of fanning out the way an angular gap does.
+            double acrossX = cos * half;
+            double acrossY = sin * half;
+
+            tessellator.addVertex(centerX + sin * inner - acrossX, centerY - cos * inner - acrossY, 0.0);
+            tessellator.addVertex(centerX + sin * outer - acrossX, centerY - cos * outer - acrossY, 0.0);
+            tessellator.addVertex(centerX + sin * outer + acrossX, centerY - cos * outer + acrossY, 0.0);
+            tessellator.addVertex(centerX + sin * inner + acrossX, centerY - cos * inner + acrossY, 0.0);
+        }
     }
 
     private static void drawIcons(MenuNode menu, int centerX, int centerY, int slotCount, int inner, int outer) {

@@ -24,8 +24,17 @@ public class MenuStyle {
      */
     public String iconColor;
 
+    /**
+     * Colour of the lines on the wheel - the dividers between sectors and the edges of the ring.
+     *
+     * <p>
+     * One colour for both, because they are one thing: the outline of the shape. Separate colours would let a menu
+     * be drawn with edges that do not match its own divisions.
+     */
+    public String borderColor;
+
     public boolean isEmpty() {
-        return isBlank(ringColor) && isBlank(highlightColor) && isBlank(iconColor);
+        return isBlank(ringColor) && isBlank(highlightColor) && isBlank(iconColor) && isBlank(borderColor);
     }
 
     private static boolean isBlank(String value) {
@@ -33,15 +42,12 @@ public class MenuStyle {
             .isEmpty();
     }
 
-    public static MenuStyle of(String ringColor, String highlightColor) {
-        return of(ringColor, highlightColor, null);
-    }
-
-    public static MenuStyle of(String ringColor, String highlightColor, String iconColor) {
+    public static MenuStyle of(String ringColor, String highlightColor, String iconColor, String borderColor) {
         MenuStyle style = new MenuStyle();
         style.ringColor = isBlank(ringColor) ? null : ringColor;
         style.highlightColor = isBlank(highlightColor) ? null : highlightColor;
         style.iconColor = isBlank(iconColor) ? null : iconColor;
+        style.borderColor = isBlank(borderColor) ? null : borderColor;
         return style.isEmpty() ? null : style;
     }
 }
