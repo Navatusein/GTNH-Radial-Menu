@@ -191,6 +191,10 @@ nothing while the colours quietly swapped.
 Menus live in `<game folder>/RadialMenu/`, not `config/` — one file per profile under `profiles/`, plus
 `settings.json` and `icons/`. Auto-bind rules live *inside* each profile so copying the file carries them.
 
+`docs/PROFILE_FORMAT.md` documents that file for someone writing one by hand, or for an assistant asked to generate
+one. It is written from the reader, not from intent, so keep it in step with `core/model/` and `core/action/` —
+notably the action types' parameter names and which of them are required.
+
 Renaming a profile to a different capitalisation is a rename of the same file on Windows, not a collision — check
 `ProfileStorage.isSameFile` before refusing, and rename through a temporary name. Writing the new file and deleting
 the old one would delete the file just written.
