@@ -1,6 +1,7 @@
 package com.navatusein.radialmenu.core.action;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,6 +96,34 @@ public class ActionSpec {
             }
         }
         return fallback;
+    }
+
+    /**
+     * Repairs a chain a hand-edited file got wrong.
+     *
+     * <p>
+     * A step with no type has no executor and would only log a warning on every activation, so it is dropped rather
+     * than carried: a chain is read as a list of things that happen, and a hole in it is not one of them. An empty
+     * list becomes null so the file does not grow a {@code "steps": []} on every save.
+     */
+    public void normalize() {
+        if (steps == null) {
+            return;
+        }
+        Iterator<ActionSpec> iterator = steps.iterator();
+        while (iterator.hasNext()) {
+            ActionSpec step = iterator.next();
+            if (step == null || step.type == null
+                || step.type.trim()
+                    .isEmpty()) {
+                iterator.remove();
+            } else {
+                step.normalize();
+            }
+        }
+        if (steps.isEmpty()) {
+            steps = null;
+        }
     }
 
     public ActionSpec copy() {

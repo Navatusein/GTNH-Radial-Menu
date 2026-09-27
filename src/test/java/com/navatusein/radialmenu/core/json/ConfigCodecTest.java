@@ -39,6 +39,68 @@ public class ConfigCodecTest {
     }
 
     @Test
+    public void aChainSurvivesARoundTrip() {
+        // steps has been in the format since before anything read it, precisely so that chains could be added
+        // without invalidating profiles written by an earlier version. This is the test that says so.
+        ActionSpec chain = new ActionSpec("sequence").set("delayTicks", "5");
+        chain.stepsOrEmpty()
+            .add(new ActionSpec("keybind").set("binding", "key.inventory"));
+
+        ActionSpec nested = new ActionSpec("sequence");
+        nested.stepsOrEmpty()
+            .add(new ActionSpec("command").set("command", "/home"));
+        chain.stepsOrEmpty()
+            .add(nested);
+
+        Profile written = Profile.empty("chains");
+        written.root.setChildAt(0, MenuNode.leaf("Go home", null, chain));
+
+        Profile read = ConfigCodec.readProfile(ConfigCodec.writeProfile(written));
+        ActionSpec readChain = read.root.childAt(0).action;
+
+        assertEquals(5, readChain.getInt("delayTicks", 0));
+        assertEquals(2, readChain.steps.size());
+        assertEquals(
+            "key.inventory",
+            readChain.steps.get(0)
+                .getString("binding", null));
+        assertEquals(
+            "/home",
+            readChain.steps.get(1).steps.get(0)
+                .getString("command", null));
+    }
+
+    @Test
+    public void normalizeDropsAStepWithNoType() {
+        // A hand-edited file can leave a hole in a chain; carrying it would log a warning on every activation.
+        ActionSpec chain = new ActionSpec("sequence");
+        chain.stepsOrEmpty()
+            .add(null);
+        chain.stepsOrEmpty()
+            .add(new ActionSpec(null));
+        chain.stepsOrEmpty()
+            .add(new ActionSpec("keybind"));
+
+        Profile profile = Profile.empty("holes");
+        profile.root.setChildAt(0, MenuNode.leaf("Chain", null, chain));
+        profile.normalize();
+
+        assertEquals(1, profile.root.childAt(0).action.steps.size());
+    }
+
+    @Test
+    public void normalizeDropsAnEmptyStepList() {
+        ActionSpec chain = new ActionSpec("sequence");
+        chain.stepsOrEmpty();
+
+        Profile profile = Profile.empty("empty");
+        profile.root.setChildAt(0, MenuNode.leaf("Chain", null, chain));
+        profile.normalize();
+
+        assertNull(profile.root.childAt(0).action.steps);
+    }
+
+    @Test
     public void profileSurvivesARoundTrip() {
         Profile written = sampleProfile();
         Profile read = ConfigCodec.readProfile(ConfigCodec.writeProfile(written));

@@ -63,6 +63,7 @@ radialmenu.action.sequence=Chain
 radialmenu.action.sequence.delayTicks=Delay (ticks)
 radialmenu.editor.editLines=Edit lines (%d)
 radialmenu.lines.add=Add line
+radialmenu.lines.add.tip=Add a line at the end. Enter adds one after the line you are typing.
 radialmenu.lines.hint=Placeholders: {player} {dim} {x} {y} {z}
 
 radialmenu.action.submenu=Submenu
@@ -133,3 +134,14 @@ radialmenu.profileColors.reset=Reset to defaults
 radialmenu.profileColors.reset.tip=Clear all three so the profile shows the colours from the mod config.
 radialmenu.profileColors.icon=Sprite icons
 radialmenu.profileColors.icon.tip=Tint for sprite icons that have no colour of their own. Items and your own PNGs are unaffected.
+
+radialmenu.steps.section=Steps
+radialmenu.steps.title=Step %s
+radialmenu.steps.add=Add step
+radialmenu.steps.add.tip=Append a step to the end of the chain.
+radialmenu.steps.edit.tip=Open this step. The arrows move it, x removes it.
+radialmenu.steps.empty=This chain has no steps yet
+radialmenu.steps.unset=not set
+radialmenu.steps.count=%s steps
+radialmenu.steps.andMore=%s (+%s more)
+radialmenu.steps.nextProfile=next
