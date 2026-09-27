@@ -4,16 +4,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.item.Item;
 import net.minecraft.util.EnumChatFormatting;
 
-import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.ui.Ui;
+import com.navatusein.radialmenu.client.gui.ui.UiCheckbox;
+import com.navatusein.radialmenu.client.gui.ui.UiScreen;
+import com.navatusein.radialmenu.client.gui.ui.UiTabButton;
 import com.navatusein.radialmenu.client.icon.IconRenderer;
 import com.navatusein.radialmenu.client.icon.SpriteAtlas;
 import com.navatusein.radialmenu.client.icon.UserIconLoader;
@@ -26,7 +28,7 @@ import com.navatusein.radialmenu.core.model.IconSpec;
  * Icons are stored as names rather than serialised stacks or raw pixels, so a profile file stays readable and
  * hand-editable.
  */
-public class GuiIconPicker extends GuiScreen {
+public class GuiIconPicker extends UiScreen {
 
     public interface Callback {
 
@@ -39,30 +41,44 @@ public class GuiIconPicker extends GuiScreen {
         FILES
     }
 
-    private static final int ID_TAB_ITEMS = 1;
-    private static final int ID_TAB_SPRITES = 2;
-    private static final int ID_TAB_FILES = 3;
-    private static final int ID_CANCEL = 4;
-    private static final int ID_REFRESH = 5;
-    private static final int ID_COLOR = 6;
+    private static final int ID_TAB_BASE = 10;
+    private static final int ID_COLOR = 20;
+    private static final int ID_REFRESH = 21;
+    private static final int ID_ORIGINAL = 22;
 
-    private static final int COLUMNS = 16;
     private static final int CELL = 20;
-    private static final int GRID_TOP = 72;
 
     private final Callback callback;
 
     private Tab tab = Tab.ITEMS;
 
     private final List<String> itemNames = new ArrayList<>();
-
     private final List<String> visible = new ArrayList<>();
 
     private GuiTextField searchField;
+    private String query = "";
 
-    /** Tint applied to sprites and user PNGs; items ignore it, since they carry their own colours. */
-    private String color = "#FFFFFF";
+    /**
+     * Tint applied to sprites and user PNGs; items carry their own colours and ignore it.
+     *
+     * <p>
+     * Blank by default, meaning the sprite inherits the profile's tint and the profile the mod's config. Starting
+     * from an explicit white would quietly pin every new icon to a colour the player never chose.
+     */
+    private String color = "";
 
+    /**
+     * Whether a user PNG keeps the colours it was drawn with.
+     *
+     * <p>
+     * A white tint already multiplies to no change, so this is not about the arithmetic - it is about not silently
+     * carrying a colour picked for the monochrome sprites over onto artwork that has its own.
+     */
+    private boolean originalColors = true;
+
+    private int gridTop;
+    private int gridLeft;
+    private int columns;
     private int scrollRow;
 
     public GuiIconPicker(Callback callback) {
@@ -79,65 +95,116 @@ public class GuiIconPicker extends GuiScreen {
     }
 
     @Override
-    public void initGui() {
-        super.initGui();
-        Keyboard.enableRepeatEvents(true);
+    protected String titleKey() {
+        return "radialmenu.editor.pickIcon";
+    }
 
+    @Override
+    protected int panelWidth() {
+        return 360;
+    }
+
+    @Override
+    protected void buildControls() {
         if (itemNames.isEmpty()) {
             for (Object key : Item.itemRegistry.getKeys()) {
                 itemNames.add(String.valueOf(key));
             }
         }
 
-        int left = gridLeft();
-        searchField = new GuiTextField(this.fontRendererObj, left, 26, COLUMNS * CELL, 16);
+        int left = contentLeft();
+        int y = contentTop();
+
+        // Search first, then the tabs. A selected tab deliberately has no bottom edge so it joins the sheet below
+        // it, so anything between the two reads as a mistake.
+        searchField = new GuiTextField(this.fontRendererObj, left + 1, y + 3, contentWidth() - 94, 14);
+        searchField.setMaxStringLength(64);
+        searchField.setText(query);
+        searchField.setCursorPositionEnd();
         searchField.setFocused(true);
 
-        this.buttonList.clear();
-        this.buttonList.add(new GuiButton(ID_COLOR, left, 47, 70, 18, color));
-        this.buttonList.add(new GuiButton(ID_TAB_ITEMS, left + 80, 47, 70, 18, I18n.format("radialmenu.icons.items")));
-        this.buttonList
-            .add(new GuiButton(ID_TAB_SPRITES, left + 154, 47, 70, 18, I18n.format("radialmenu.icons.sprites")));
-        this.buttonList.add(new GuiButton(ID_TAB_FILES, left + 228, 47, 70, 18, I18n.format("radialmenu.icons.files")));
-        this.buttonList.add(new GuiButton(ID_REFRESH, left + 302, 47, 18, 18, "R"));
-        this.buttonList
-            .add(new GuiButton(ID_CANCEL, this.width / 2 - 100, this.height - 24, 200, 20, I18n.format("gui.cancel")));
+        // Blank label: the swatch and the hex are drawn together in the overlay, because a centred button label
+        // would sit underneath the swatch.
+        GuiButton colorButton = new GuiButton(ID_COLOR, contentRight() - 90, y, 66, Ui.ROW, "");
+        // Only sprites and untinted-by-choice PNGs take a colour; an item would ignore it.
+        colorButton.enabled = tab != Tab.ITEMS && !(tab == Tab.FILES && originalColors);
+        this.buttonList.add(colorButton);
+        tooltip(ID_COLOR, I18n.format("radialmenu.icons.color.tip"));
+        this.buttonList.add(new GuiButton(ID_REFRESH, contentRight() - 20, y, 20, Ui.ROW, "R"));
+        tooltip(ID_REFRESH, I18n.format("radialmenu.icons.refresh.tip"));
+
+        y += Ui.STEP;
+
+        Tab[] tabs = Tab.values();
+        int tabWidth = (contentWidth() - (tabs.length - 1) * 2) / tabs.length;
+        for (int i = 0; i < tabs.length; i++) {
+            this.buttonList.add(
+                new UiTabButton(
+                    ID_TAB_BASE + i,
+                    left + i * (tabWidth + 2),
+                    y,
+                    tabWidth,
+                    I18n.format(
+                        "radialmenu.icons." + tabs[i].name()
+                            .toLowerCase()),
+                    tabs[i] == tab));
+        }
+
+        int afterTabs = y + UiTabButton.HEIGHT;
+
+        if (tab == Tab.FILES) {
+            this.buttonList.add(
+                new UiCheckbox(
+                    ID_ORIGINAL,
+                    left,
+                    afterTabs + Ui.GAP,
+                    contentWidth(),
+                    I18n.format("radialmenu.icons.original"),
+                    originalColors));
+            tooltip(ID_ORIGINAL, I18n.format("radialmenu.icons.original.tip"));
+            afterTabs += Ui.STEP;
+        }
+
+        // The grid frame starts exactly where the tabs end, so the selected one runs into it.
+        gridTop = afterTabs;
+        gridLeft = left;
+        columns = Math.max(1, contentWidth() / CELL);
 
         refilter();
+        addBottomBar("gui.cancel", null, null);
     }
 
-    private int gridLeft() {
-        return this.width / 2 - COLUMNS * CELL / 2;
+    private int gridBottom() {
+        return panelBottom - Ui.PAD;
     }
 
     private int rowsVisible() {
-        return Math.max(1, (this.height - GRID_TOP - 40) / CELL);
+        return Math.max(1, (gridBottom() - gridTop - 2) / CELL);
     }
 
     private void refilter() {
-        String query = searchField.getText()
-            .trim()
+        String needle = query.trim()
             .toLowerCase();
         visible.clear();
 
         switch (tab) {
             case ITEMS:
                 for (String name : itemNames) {
-                    if (query.isEmpty() || name.toLowerCase()
-                        .contains(query)) {
+                    if (needle.isEmpty() || name.toLowerCase()
+                        .contains(needle)) {
                         visible.add(name);
                     }
                 }
                 break;
             case SPRITES:
-                for (SpriteAtlas.Sprite sprite : SpriteAtlas.search(query)) {
+                for (SpriteAtlas.Sprite sprite : SpriteAtlas.search(needle)) {
                     visible.add(sprite.name);
                 }
                 break;
             case FILES:
                 for (String name : UserIconLoader.listFiles()) {
-                    if (query.isEmpty() || name.toLowerCase()
-                        .contains(query)) {
+                    if (needle.isEmpty() || name.toLowerCase()
+                        .contains(needle)) {
                         visible.add(name);
                     }
                 }
@@ -145,7 +212,12 @@ public class GuiIconPicker extends GuiScreen {
             default:
                 break;
         }
-        scrollRow = 0;
+        clampScroll();
+    }
+
+    private void clampScroll() {
+        int maxRow = Math.max(0, (visible.size() + columns - 1) / columns - rowsVisible());
+        scrollRow = Math.max(0, Math.min(maxRow, scrollRow));
     }
 
     /** Builds the spec for an entry of the current tab, so drawing and picking cannot disagree about it. */
@@ -155,7 +227,8 @@ public class GuiIconPicker extends GuiScreen {
                 return IconSpec.sprite(SpriteAtlas.qualify(name), color);
             case FILES:
                 IconSpec file = IconSpec.file(name);
-                file.color = color;
+                // Null means untinted, which is how the artwork's own colours survive.
+                file.color = originalColors ? null : color;
                 return file;
             case ITEMS:
             default:
@@ -165,70 +238,63 @@ public class GuiIconPicker extends GuiScreen {
 
     @Override
     protected void actionPerformed(GuiButton button) {
-        switch (button.id) {
-            case ID_TAB_ITEMS:
-                tab = Tab.ITEMS;
-                refilter();
-                return;
-            case ID_TAB_SPRITES:
-                tab = Tab.SPRITES;
-                refilter();
-                return;
-            case ID_TAB_FILES:
-                tab = Tab.FILES;
-                refilter();
-                return;
-            case ID_REFRESH:
-                // Picks up a PNG the player just dropped into the folder, without restarting the game.
-                UserIconLoader.refresh();
-                refilter();
-                return;
-            case ID_COLOR:
-                GuiStack.push(new GuiColorPicker(color, new GuiColorPicker.Result() {
+        if (button.id == ID_PRIMARY) {
+            onCancel();
+            return;
+        }
+        if (button.id == ID_COLOR) {
+            GuiStack.push(new GuiColorPicker(color, new GuiColorPicker.Result() {
 
-                    @Override
-                    public void onColorPicked(String hex) {
-                        color = hex;
-                    }
-                }));
-                return;
-            case ID_CANCEL:
-                GuiStack.pop();
-                return;
-            default:
-                break;
+                @Override
+                public void onColorPicked(String hex) {
+                    color = hex;
+                    requestRebuild();
+                }
+            }));
+            return;
+        }
+        if (button.id == ID_ORIGINAL) {
+            ((UiCheckbox) button).toggle();
+            originalColors = ((UiCheckbox) button).checked;
+            requestRebuild();
+            return;
+        }
+        if (button.id == ID_REFRESH) {
+            // Picks up a PNG just dropped into the folder, without restarting the game.
+            UserIconLoader.refresh();
+            requestRebuild();
+            return;
+        }
+
+        int tabIndex = button.id - ID_TAB_BASE;
+        Tab[] tabs = Tab.values();
+        if (tabIndex >= 0 && tabIndex < tabs.length) {
+            tab = tabs[tabIndex];
+            scrollRow = 0;
+            requestRebuild();
         }
     }
 
     @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        this.drawDefaultBackground();
-        this.drawCenteredString(
-            this.fontRendererObj,
-            I18n.format("radialmenu.editor.pickIcon"),
-            this.width / 2,
-            10,
-            0xFFFFFF);
-
+    protected void drawContent(int mouseX, int mouseY, float partialTicks) {
         searchField.drawTextBox();
+        // The grid needs a ground of its own; against the bare panel the icons read as scattered rather than listed.
+        Ui.list(gridLeft, gridTop, contentRight(), gridBottom());
 
-        int left = gridLeft();
-        // Swatch on the colour button, so the current tint is visible without reading a hex code.
-        drawRect(left + 2, 49, left + 14, 63, 0xFF000000 | IconSpec.parseRgb(color, 0xFFFFFF));
-        int rows = rowsVisible();
         String hoveredName = null;
+        int rows = rowsVisible();
 
         for (int row = 0; row < rows; row++) {
-            for (int column = 0; column < COLUMNS; column++) {
-                int index = (row + scrollRow) * COLUMNS + column;
+            for (int column = 0; column < columns; column++) {
+                int index = (row + scrollRow) * columns + column;
                 if (index >= visible.size()) {
                     break;
                 }
-                int x = left + column * CELL;
-                int y = GRID_TOP + row * CELL;
+                int x = gridLeft + 2 + column * CELL;
+                int y = gridTop + 2 + row * CELL;
 
                 if (mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL) {
-                    drawRect(x, y, x + CELL, y + CELL, 0x80FFFFFF);
+                    drawRect(x, y, x + CELL, y + CELL, Ui.ROW_HOVER);
                     hoveredName = visible.get(index);
                 }
                 IconRenderer.draw(specFor(visible.get(index)), x + 2, y + 2);
@@ -241,15 +307,45 @@ public class GuiIconPicker extends GuiScreen {
                 EnumChatFormatting.GRAY
                     + I18n.format(tab == Tab.FILES ? "radialmenu.icons.noFiles" : "radialmenu.icons.noMatches"),
                 this.width / 2,
-                GRID_TOP + 8,
-                0xFFFFFF);
+                gridTop + 8,
+                Ui.TEXT);
         }
 
         if (hoveredName != null) {
-            this.drawCenteredString(this.fontRendererObj, hoveredName, this.width / 2, this.height - 38, 0xFFFF80);
+            this.drawCenteredString(this.fontRendererObj, hoveredName, this.width / 2, gridBottom() + 2, 0xFFFFFF80);
         }
+    }
 
-        super.drawScreen(mouseX, mouseY, partialTicks);
+    @Override
+    protected void drawOverlay(int mouseX, int mouseY, float partialTicks) {
+        for (Object raw : this.buttonList) {
+            GuiButton button = (GuiButton) raw;
+            if (button.id != ID_COLOR) {
+                continue;
+            }
+            int swatchTop = button.yPosition + 4;
+            boolean inherited = color.trim()
+                .isEmpty();
+
+            // An inherited tint still has a colour - the profile's, or the config's - so the swatch shows that one
+            // rather than a blank, and the label says where it came from.
+            int shown = inherited ? IconRenderer.resolveTint(null) : IconSpec.parseRgb(color, 0xFFFFFF);
+            Ui.frame(
+                button.xPosition + 4,
+                swatchTop,
+                button.xPosition + 16,
+                swatchTop + 12,
+                0xFF000000 | shown,
+                0xFF000000);
+
+            String label = inherited ? I18n.format("radialmenu.editor.inherit") : color;
+            this.fontRendererObj.drawString(
+                Ui.fit(label, button.width - 24),
+                button.xPosition + 20,
+                button.yPosition + (Ui.ROW - 8) / 2,
+                button.enabled ? Ui.TEXT : Ui.TEXT_MUTED);
+            return;
+        }
     }
 
     @Override
@@ -257,29 +353,28 @@ public class GuiIconPicker extends GuiScreen {
         super.handleMouseInput();
         int wheel = Mouse.getEventDWheel();
         if (wheel != 0) {
-            int maxScroll = Math.max(0, (visible.size() + COLUMNS - 1) / COLUMNS - rowsVisible());
-            scrollRow = Math.max(0, Math.min(maxScroll, scrollRow + (wheel > 0 ? -1 : 1)));
+            scrollRow += wheel > 0 ? -1 : 1;
+            clampScroll();
         }
     }
 
     @Override
-    protected void mouseClicked(int mouseX, int mouseY, int button) {
-        super.mouseClicked(mouseX, mouseY, button);
-        searchField.mouseClicked(mouseX, mouseY, button);
+    protected void mouseClicked(int mouseX, int mouseY, int mouseButton) {
+        super.mouseClicked(mouseX, mouseY, mouseButton);
+        searchField.mouseClicked(mouseX, mouseY, mouseButton);
 
-        if (button != 0) {
+        if (mouseButton != 0) {
             return;
         }
-        int left = gridLeft();
         int rows = rowsVisible();
         for (int row = 0; row < rows; row++) {
-            for (int column = 0; column < COLUMNS; column++) {
-                int index = (row + scrollRow) * COLUMNS + column;
+            for (int column = 0; column < columns; column++) {
+                int index = (row + scrollRow) * columns + column;
                 if (index >= visible.size()) {
                     return;
                 }
-                int x = left + column * CELL;
-                int y = GRID_TOP + row * CELL;
+                int x = gridLeft + 2 + column * CELL;
+                int y = gridTop + 2 + row * CELL;
                 if (mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL) {
                     callback.onIconPicked(specFor(visible.get(index)));
                     GuiStack.pop();
@@ -290,24 +385,13 @@ public class GuiIconPicker extends GuiScreen {
     }
 
     @Override
-    protected void keyTyped(char typedChar, int keyCode) {
-        if (keyCode == Keyboard.KEY_ESCAPE) {
-            GuiStack.pop();
-            return;
-        }
+    protected boolean handleKey(char typedChar, int keyCode) {
         if (searchField.textboxKeyTyped(typedChar, keyCode)) {
+            query = searchField.getText();
+            scrollRow = 0;
             refilter();
+            return true;
         }
-    }
-
-    @Override
-    public void onGuiClosed() {
-        super.onGuiClosed();
-        Keyboard.enableRepeatEvents(false);
-    }
-
-    @Override
-    public boolean doesGuiPauseGame() {
         return false;
     }
 }

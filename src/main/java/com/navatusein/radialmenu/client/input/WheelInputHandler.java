@@ -6,6 +6,7 @@ import net.minecraft.client.multiplayer.ServerData;
 import com.navatusein.radialmenu.client.action.ActionExecutors;
 import com.navatusein.radialmenu.client.gui.GuiRadialWheel;
 import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.editor.GuiProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -53,8 +54,16 @@ public class WheelInputHandler {
         ActionExecutors.runPending();
         GuiStack.openRequested();
 
-        if (WheelKeyBindings.cycleProfile.isPressed()) {
+        if (WheelKeyBindings.nextProfile.isPressed()) {
             ProfileManager.cycle(1);
+        }
+        if (WheelKeyBindings.previousProfile.isPressed()) {
+            ProfileManager.cycle(-1);
+        }
+        if (WheelKeyBindings.openEditor.isPressed()) {
+            // Deferred by a tick, like the chat command: opening a screen from here would be undone by whatever
+            // closes right after the key is handled.
+            GuiStack.requestOpen(new GuiProfileManager());
         }
 
         boolean down = KeyInjector.isPhysicallyDown(WheelKeyBindings.openWheel);

@@ -1,7 +1,6 @@
 package com.navatusein.radialmenu.client.gui.editor;
 
 import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
 import net.minecraft.util.EnumChatFormatting;
@@ -9,16 +8,18 @@ import net.minecraft.util.EnumChatFormatting;
 import org.lwjgl.input.Keyboard;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.ui.Ui;
+import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 
 /**
  * Asks for a single line of text.
  *
  * <p>
- * Shared by every place that needs a name - new profile, rename, duplicate - so those three do not each grow their own
- * screen. The caller decides whether the value is acceptable and reports back through {@link Result}, which is what
- * lets a name collision show an error here instead of failing silently after the screen has closed.
+ * Shared by everything that needs a name, so new, rename and duplicate do not each grow their own screen. The caller
+ * decides whether the value is acceptable and answers through {@link Result}, which is what lets a name collision be
+ * reported here rather than failing quietly once the screen has already closed.
  */
-public class GuiTextPrompt extends GuiScreen {
+public class GuiTextPrompt extends UiScreen {
 
     /** Returned by the caller to say whether the prompt may close. */
     public interface Result {
@@ -27,48 +28,55 @@ public class GuiTextPrompt extends GuiScreen {
         String onConfirm(String value);
     }
 
-    private static final int ID_OK = 1;
-    private static final int ID_CANCEL = 2;
-
-    private final String titleKey;
-    private final String initialValue;
+    private final String promptKey;
     private final Result result;
 
     private GuiTextField input;
+    private String text;
     private String errorKey;
 
-    public GuiTextPrompt(String titleKey, String initialValue, Result result) {
-        this.titleKey = titleKey;
-        this.initialValue = initialValue == null ? "" : initialValue;
+    public GuiTextPrompt(String promptKey, String initialValue, Result result) {
+        this.promptKey = promptKey;
         this.result = result;
+        this.text = initialValue == null ? "" : initialValue;
     }
 
     @Override
-    public void initGui() {
-        super.initGui();
-        Keyboard.enableRepeatEvents(true);
+    protected String titleKey() {
+        return promptKey;
+    }
 
-        input = new GuiTextField(this.fontRendererObj, this.width / 2 - 100, this.height / 2 - 10, 200, 18);
+    @Override
+    protected int panelWidth() {
+        return 260;
+    }
+
+    @Override
+    protected void buildControls() {
+        int y = contentTop() + Ui.GAP;
+        input = new GuiTextField(this.fontRendererObj, contentLeft() + 1, y + 3, contentWidth() - 2, 14);
         input.setMaxStringLength(48);
-        input.setText(initialValue);
+        input.setText(text);
         input.setFocused(true);
         input.setCursorPositionEnd();
 
-        this.buttonList.clear();
-        this.buttonList
-            .add(new GuiButton(ID_OK, this.width / 2 - 100, this.height / 2 + 16, 98, 20, I18n.format("gui.done")));
-        this.buttonList
-            .add(new GuiButton(ID_CANCEL, this.width / 2 + 2, this.height / 2 + 16, 98, 20, I18n.format("gui.cancel")));
+        setContentHeight(Ui.STEP * 2);
+        addBottomBar("gui.done", null, "gui.cancel");
+    }
+
+    @Override
+    protected int panelHeightHint() {
+        return 96;
     }
 
     private void confirm() {
-        String value = input.getText()
+        text = input.getText()
             .trim();
-        if (value.isEmpty()) {
+        if (text.isEmpty()) {
             errorKey = "radialmenu.editor.nameEmpty";
             return;
         }
-        errorKey = result.onConfirm(value);
+        errorKey = result.onConfirm(text);
         if (errorKey == null) {
             GuiStack.pop();
         }
@@ -76,34 +84,24 @@ public class GuiTextPrompt extends GuiScreen {
 
     @Override
     protected void actionPerformed(GuiButton button) {
-        if (button.id == ID_OK) {
+        if (button.id == ID_PRIMARY) {
             confirm();
-        } else if (button.id == ID_CANCEL) {
-            GuiStack.pop();
+        } else if (button.id == ID_SECONDARY) {
+            onCancel();
         }
     }
 
     @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        this.drawDefaultBackground();
-        this.drawCenteredString(
-            this.fontRendererObj,
-            I18n.format(titleKey),
-            this.width / 2,
-            this.height / 2 - 34,
-            0xFFFFFF);
+    protected void drawContent(int mouseX, int mouseY, float partialTicks) {
         input.drawTextBox();
-
         if (errorKey != null) {
             this.drawCenteredString(
                 this.fontRendererObj,
                 EnumChatFormatting.RED + I18n.format(errorKey),
                 this.width / 2,
-                this.height / 2 + 42,
-                0xFFFFFF);
+                input.yPosition + 22,
+                Ui.TEXT);
         }
-
-        super.drawScreen(mouseX, mouseY, partialTicks);
     }
 
     @Override
@@ -113,28 +111,15 @@ public class GuiTextPrompt extends GuiScreen {
     }
 
     @Override
-    protected void keyTyped(char typedChar, int keyCode) {
-        if (keyCode == Keyboard.KEY_ESCAPE) {
-            GuiStack.pop();
-            return;
-        }
+    protected boolean handleKey(char typedChar, int keyCode) {
         if (keyCode == Keyboard.KEY_RETURN || keyCode == Keyboard.KEY_NUMPADENTER) {
             confirm();
-            return;
+            return true;
         }
         if (input.textboxKeyTyped(typedChar, keyCode)) {
             errorKey = null;
+            return true;
         }
-    }
-
-    @Override
-    public void onGuiClosed() {
-        super.onGuiClosed();
-        Keyboard.enableRepeatEvents(false);
-    }
-
-    @Override
-    public boolean doesGuiPauseGame() {
         return false;
     }
 }

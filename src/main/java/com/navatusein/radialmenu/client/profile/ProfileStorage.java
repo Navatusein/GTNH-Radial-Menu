@@ -141,6 +141,44 @@ public final class ProfileStorage {
         return profileFile(name).delete();
     }
 
+    /**
+     * Renames a profile's file.
+     *
+     * <p>
+     * Goes through a temporary name because Windows filesystems are case-insensitive: renaming
+     * {@code default.json} straight to {@code Default.json} is a no-op there, and writing the new name then deleting
+     * the old one would delete the file just written.
+     */
+    public static boolean renameFile(String from, String to) {
+        File source = profileFile(from);
+        File target = profileFile(to);
+        if (!source.isFile()) {
+            return false;
+        }
+
+        File temp = new File(profilesDir(), sanitize(from) + ".rename.tmp");
+        if (temp.exists() && !temp.delete()) {
+            RadialMenuMod.LOG.error("Could not clear " + temp.getName());
+            return false;
+        }
+        if (!source.renameTo(temp)) {
+            RadialMenuMod.LOG.error("Could not rename " + source.getName());
+            return false;
+        }
+        if (!temp.renameTo(target)) {
+            // Put it back rather than leaving the profile under a temporary name.
+            temp.renameTo(source);
+            RadialMenuMod.LOG.error("Could not rename " + temp.getName() + " to " + target.getName());
+            return false;
+        }
+        return true;
+    }
+
+    /** True when two names would land on the same file, which on Windows includes differing only in case. */
+    public static boolean isSameFile(String a, String b) {
+        return sanitize(a).equalsIgnoreCase(sanitize(b));
+    }
+
     public static Settings loadSettings() {
         File file = new File(rootDir, SETTINGS_FILE);
         if (!file.isFile()) {

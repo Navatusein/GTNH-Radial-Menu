@@ -58,6 +58,11 @@ public class RadialMenuConfig {
     @Config.Order(8)
     public static String highlightColor;
 
+    @Config.Comment("Default tint for sprite icons, #RRGGBB. Items and your own PNGs are not tinted.")
+    @Config.DefaultString("#FFFFFF")
+    @Config.Order(9)
+    public static String iconColor;
+
     /** Guards against a hand-edited config where the hole is bigger than the ring. */
     public static int effectiveInnerRadius() {
         return Math.min(innerRadius, outerRadius - 8);

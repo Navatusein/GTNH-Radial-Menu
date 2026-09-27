@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.OpenGlHelper;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.entity.RenderItem;
@@ -12,8 +13,13 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.util.ResourceLocation;
 
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 
+import com.navatusein.radialmenu.client.profile.ProfileManager;
+import com.navatusein.radialmenu.config.RadialMenuConfig;
+import com.navatusein.radialmenu.core.Colors;
 import com.navatusein.radialmenu.core.model.IconSpec;
+import com.navatusein.radialmenu.core.model.MenuStyle;
 
 /**
  * Draws whatever a slot's {@link IconSpec} points at.
@@ -62,14 +68,55 @@ public final class IconRenderer {
             return;
         }
         Minecraft mc = Minecraft.getMinecraft();
+
         GL11.glPushMatrix();
         GL11.glEnable(GL11.GL_DEPTH_TEST);
         RenderHelper.enableGUIStandardItemLighting();
+
+        // The two calls that decide whether a block model comes out lit, copied from GuiContainer's slot pass.
+        // A block is drawn scaled ten times, and without GL_RESCALE_NORMAL that scale goes into the normals and the
+        // lighting is computed against the wrong ones - flat sprites, which ignore lighting entirely, escape it,
+        // which is why only the three-dimensional icons looked dark. The lightmap has to be forced to full
+        // brightness too, or an item inherits whatever coordinate world rendering left behind.
+        GL11.glEnable(GL12.GL_RESCALE_NORMAL);
+        OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240.0F, 240.0F);
+        GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
+
         RenderItem.getInstance()
             .renderItemAndEffectIntoGUI(mc.fontRenderer, mc.getTextureManager(), stack, x, y);
+
         RenderHelper.disableStandardItemLighting();
+        GL11.glDisable(GL12.GL_RESCALE_NORMAL);
         GL11.glDisable(GL11.GL_DEPTH_TEST);
         GL11.glPopMatrix();
+    }
+
+    /**
+     * Tint for a sprite: its own colour if it has one, otherwise the profile's, otherwise the mod's config.
+     *
+     * <p>
+     * Only sprites go through this. They are monochrome by design, so a colour is the only thing distinguishing
+     * them; items carry their own, and a player's PNG is left as drawn.
+     */
+    /**
+     * Tint for an icon that takes one.
+     *
+     * <p>
+     * A null colour means the artwork keeps its own - that is what the PNG tab's "keep original colours" sets, and
+     * it is deliberately different from an empty one, which means inherit.
+     */
+    private static int tintFor(IconSpec icon) {
+        return icon.color == null ? 0xFFFFFF : resolveTint(icon.color);
+    }
+
+    /** The same resolution for a bare colour string, so the editor can show what inheriting will look like. */
+    public static int resolveTint(String override) {
+        int tint = Colors.parseArgb(RadialMenuConfig.iconColor, 0xFFFFFF) & 0x00FFFFFF;
+        MenuStyle profileStyle = ProfileManager.active().style;
+        if (profileStyle != null) {
+            tint = Colors.over(profileStyle.iconColor, tint) & 0x00FFFFFF;
+        }
+        return Colors.over(override, tint) & 0x00FFFFFF;
     }
 
     private static void drawSprite(IconSpec icon, int x, int y, int size) {
@@ -85,7 +132,7 @@ public final class IconRenderer {
             x,
             y,
             size,
-            icon.rgbOrWhite(),
+            tintFor(icon),
             SpriteAtlas.minU(sprite),
             SpriteAtlas.minV(sprite),
             SpriteAtlas.maxU(sprite),
@@ -101,7 +148,9 @@ public final class IconRenderer {
             .getTextureManager()
             .bindTexture(texture);
 
-        drawTexturedQuad(x, y, size, icon.rgbOrWhite(), 0f, 0f, 1f, 1f);
+        // Same resolution as a sprite: an explicit colour wins, an empty one inherits the profile and then the
+        // config, and a null one leaves the image exactly as it was drawn.
+        drawTexturedQuad(x, y, size, tintFor(icon), 0f, 0f, 1f, 1f);
     }
 
     /**
