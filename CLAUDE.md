@@ -44,8 +44,9 @@ grep -r "net.minecraft" src/main/java/com/navatusein/radialmenu/core/   # must b
 
 `ActionSpec` is `{type, params: Map<String,String>, steps: List<ActionSpec>}`. Executors (`client/action/`) are
 registered by type id and are the only place Minecraft enters the pipeline. `ActionTypes` holds editor-facing field
-descriptors, and `GuiSlotEditor` builds its widgets from them — so **a new action type needs a descriptor and an
-executor, and no GUI code**. `steps` is the reserved hook for action chains; it is parsed today, executed from phase 2.
+descriptors, and `GuiActionEditor` builds its widgets from them — so **a new action type needs a descriptor and an
+executor, and no GUI code**. `steps` holds the nested actions of a chain; `ActionType.chain` is what makes the editor
+offer a step list instead of trusting the type id.
 
 MineMenu's equivalent is a closed `enum` with a bespoke screen per type. Don't reintroduce that shape.
 
@@ -108,6 +109,11 @@ Every screen extends `UiScreen` and takes its measurements from `Ui`. That exist
 its own hardcoded offsets, which is why buttons jumped between screens and gaps never matched. `UiScreen` owns the
 framed panel, the scrolling, and a button bar pinned a fixed distance from the bottom edge; `UiList` owns the row
 arithmetic. Put anything positional in `Ui`, never in a screen.
+
+`GuiActionEditor` is the shared "what this does" half: the type tabs, the generated fields, and a chain's step list.
+`GuiSlotEditor` puts an appearance section above it, `GuiStepEditor` edits one step of a chain with the same controls
+minus title, icon and keep-open — those belong to the entry that owns the chain, not to an action. A submenu is
+offered on a slot and not as a step, because it has no executor: it is a shape, not something to run.
 
 **Never mutate `buttonList` inside `actionPerformed`.** `GuiScreen.mouseClicked` walks the list by index and re-reads
 `size()` every iteration, calling `actionPerformed` from inside that loop — so replacing the list mid-click makes the
@@ -183,4 +189,6 @@ wheel rendering and lifecycle, keybind action (tap/toggle/hold), profile-switch 
 placeholders, action chains, submenu-as-action-type with per-menu layout and colours, entry reordering, the full
 editor, and `/radialmenu`.
 
-Not built yet: inventory moves, backpack integration, mob-effect icons.
+Not built yet: inventory moves, backpack integration, mob-effect icons. `GuiMenuSettings` still carries its own copy
+of the generated-field code rather than sharing `GuiActionEditor`'s; it edits a node through `SubmenuFields` rather
+than an action, so the two have not been merged.

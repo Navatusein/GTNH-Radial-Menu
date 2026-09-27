@@ -4,24 +4,27 @@ import java.util.ArrayList;
 import java.util.List;
 
 import net.minecraft.client.gui.GuiButton;
-import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
-import net.minecraft.util.EnumChatFormatting;
 
 import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.ui.Ui;
+import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 
 /**
  * Edits a list of lines - in practice, the commands a menu entry sends.
  *
  * <p>
- * 1.7.10 has no multi-line text field, so this is a column of ordinary ones with a remove button each. Enter on the
- * last line adds another, which is what makes typing a handful of commands bearable.
+ * 1.7.10 has no multi-line text field, so this is a column of ordinary ones with a remove button each. Enter on any
+ * line adds another, which is what makes typing a handful of commands bearable.
+ *
+ * <p>
+ * The lines are numbered because a command entry can send one line per press, cycling through them: without the
+ * numbers there is no way to see what order that cycle goes in.
  */
-public class GuiMultilineEditor extends GuiScreen {
+public class GuiMultilineEditor extends UiScreen {
 
     public interface Result {
 
@@ -30,24 +33,23 @@ public class GuiMultilineEditor extends GuiScreen {
     }
 
     private static final int ID_ADD = 1;
-    private static final int ID_DONE = 2;
-    private static final int ID_CANCEL = 3;
-    private static final int ID_REMOVE_BASE = 100;
+    private static final int ID_REMOVE_BASE = 200;
 
-    private static final int ROW_HEIGHT = 20;
-    private static final int LIST_TOP = 40;
-    private static final int FIELD_WIDTH = 280;
+    private static final int NUMBER_WIDTH = 16;
+    private static final int REMOVE_WIDTH = 20;
 
     private final String titleKey;
     private final Result result;
 
     private final List<String> lines = new ArrayList<>();
+
     private final List<GuiTextField> fields = new ArrayList<>();
 
-    private int scrollRow;
+    /** Which line each built field belongs to - only visible rows have fields, so the two are not parallel. */
+    private final List<Integer> fieldLineIndex = new ArrayList<>();
 
-    /** Rebuilding inside actionPerformed would make the click loop walk the new buttons; see CLAUDE.md. */
-    private boolean rebuildPending;
+    /** Focused after the next rebuild, so a line added by Enter is the one you carry on typing into. */
+    private int focusLine = -1;
 
     public GuiMultilineEditor(String titleKey, String initialText, Result result) {
         this.titleKey = titleKey;
@@ -64,104 +66,129 @@ public class GuiMultilineEditor extends GuiScreen {
     }
 
     @Override
-    public void initGui() {
-        super.initGui();
-        Keyboard.enableRepeatEvents(true);
-        rebuild();
+    protected String titleKey() {
+        return titleKey;
     }
 
-    private int rowsVisible() {
-        return Math.max(1, (this.height - LIST_TOP - 60) / ROW_HEIGHT);
+    @Override
+    protected int panelWidth() {
+        return 360;
     }
 
-    private int listLeft() {
-        return this.width / 2 - (FIELD_WIDTH + 24) / 2;
+    @Override
+    protected boolean framedViewport() {
+        return true;
     }
 
-    private void rebuild() {
-        this.buttonList.clear();
+    /** The hint and the add button, both of which stay put rather than scrolling away with the lines. */
+    @Override
+    protected int footerHeight() {
+        return 10 + Ui.GAP + Ui.ROW;
+    }
+
+    @Override
+    protected void buildControls() {
         fields.clear();
+        fieldLineIndex.clear();
 
-        int left = listLeft();
-        int rows = rowsVisible();
+        int left = contentLeft();
+        int fieldLeft = left + NUMBER_WIDTH;
+        int fieldWidth = contentRight() - fieldLeft - REMOVE_WIDTH - Ui.GAP;
+        int y = scrolledTop();
 
-        for (int row = 0; row < rows && row + scrollRow < lines.size(); row++) {
-            int index = row + scrollRow;
-            int y = LIST_TOP + row * ROW_HEIGHT;
-
-            GuiTextField field = new GuiTextField(this.fontRendererObj, left, y + 2, FIELD_WIDTH, 16);
-            field.setMaxStringLength(256);
-            field.setText(lines.get(index));
-            fields.add(field);
-
-            this.buttonList.add(new GuiButton(ID_REMOVE_BASE + row, left + FIELD_WIDTH + 4, y, 20, 18, "X"));
-        }
-
-        if (!fields.isEmpty()) {
-            fields.get(fields.size() - 1)
-                .setFocused(true);
-        }
-
-        // Full width and directly under the lines, rather than tucked into a corner where it read as unrelated.
-        int addY = LIST_TOP + rows * ROW_HEIGHT + 4;
-        this.buttonList
-            .add(new GuiButton(ID_ADD, left, addY, FIELD_WIDTH + 24, 20, I18n.format("radialmenu.lines.add")));
-        this.buttonList
-            .add(new GuiButton(ID_DONE, this.width / 2 - 100, this.height - 28, 98, 20, I18n.format("gui.done")));
-        this.buttonList
-            .add(new GuiButton(ID_CANCEL, this.width / 2 + 2, this.height - 28, 98, 20, I18n.format("gui.cancel")));
-    }
-
-    /** Text fields are the source of truth while the screen is open, so they are read back before any reshuffle. */
-    private void captureFields() {
-        for (int row = 0; row < fields.size(); row++) {
-            int index = row + scrollRow;
-            if (index < lines.size()) {
-                lines.set(
-                    index,
-                    fields.get(row)
-                        .getText());
+        for (int i = 0; i < lines.size(); i++) {
+            // Rows that do not fit are not built at all. Creating them and hiding them afterwards left buttons and
+            // text fields disagreeing about where the edge was.
+            if (!isVisibleRow(y)) {
+                y += Ui.STEP;
+                continue;
             }
-        }
-    }
 
-    private void addLine() {
-        captureFields();
-        lines.add("");
-        // Keep the new line on screen.
-        scrollRow = Math.max(0, lines.size() - rowsVisible());
-        rebuildPending = true;
+            GuiTextField field = new GuiTextField(this.fontRendererObj, fieldLeft + 1, y + 3, fieldWidth - 2, 14);
+            field.setMaxStringLength(256);
+            field.setText(lines.get(i));
+            field.setCursorPositionEnd();
+            if (i == focusLine) {
+                field.setFocused(true);
+            }
+            fields.add(field);
+            fieldLineIndex.add(Integer.valueOf(i));
+
+            this.buttonList
+                .add(new GuiButton(ID_REMOVE_BASE + i, contentRight() - REMOVE_WIDTH, y, REMOVE_WIDTH, Ui.ROW, "x"));
+            y += Ui.STEP;
+        }
+        focusLine = -1;
+
+        setContentHeight(lines.size() * Ui.STEP);
+
+        GuiButton add = new GuiButton(
+            ID_ADD,
+            left,
+            panelBottom - Ui.PAD - Ui.ROW,
+            contentWidth(),
+            Ui.ROW,
+            I18n.format("radialmenu.lines.add"));
+        this.buttonList.add(add);
+        markFooter(ID_ADD);
+        tooltip(ID_ADD, I18n.format("radialmenu.lines.add.tip"));
+
+        addBottomBar("gui.done", null, "gui.cancel");
     }
 
     @Override
     protected void actionPerformed(GuiButton button) {
-        if (button.id == ID_ADD) {
-            addLine();
-            return;
-        }
-        if (button.id == ID_DONE) {
+        if (button.id == ID_PRIMARY) {
             captureFields();
             result.onLinesEdited(join());
             GuiStack.pop();
             return;
         }
-        if (button.id == ID_CANCEL) {
-            GuiStack.pop();
+        if (button.id == ID_SECONDARY) {
+            onCancel();
+            return;
+        }
+        if (button.id == ID_ADD) {
+            addLine(lines.size());
             return;
         }
 
-        int row = button.id - ID_REMOVE_BASE;
-        if (row >= 0 && row < fields.size()) {
+        int index = button.id - ID_REMOVE_BASE;
+        if (index >= 0 && index < lines.size()) {
             captureFields();
-            int index = row + scrollRow;
-            if (index < lines.size()) {
-                lines.remove(index);
-            }
+            lines.remove(index);
             if (lines.isEmpty()) {
                 lines.add("");
             }
-            scrollRow = Math.min(scrollRow, Math.max(0, lines.size() - 1));
-            rebuildPending = true;
+            requestRebuild();
+        }
+    }
+
+    /** Adds a line at a position and scrolls it into view, so Enter at the bottom of a long list is not a dead end. */
+    private void addLine(int index) {
+        captureFields();
+        lines.add(Math.min(index, lines.size()), "");
+        focusLine = Math.min(index, lines.size() - 1);
+        scrollOffset = Math.min(maxScrollAfterAdd(), Math.max(0, (focusLine + 1) * Ui.STEP - viewportHeight()));
+        requestRebuild();
+    }
+
+    /** {@link #maxScroll} still reflects the old line count, the content height being set during the build. */
+    private int maxScrollAfterAdd() {
+        return Math.max(0, lines.size() * Ui.STEP - viewportHeight());
+    }
+
+    /** Text fields are the source of truth while the screen is open, so they are read back before any reshuffle. */
+    private void captureFields() {
+        for (int i = 0; i < fields.size(); i++) {
+            int index = fieldLineIndex.get(i)
+                .intValue();
+            if (index < lines.size()) {
+                lines.set(
+                    index,
+                    fields.get(i)
+                        .getText());
+            }
         }
     }
 
@@ -181,85 +208,72 @@ public class GuiMultilineEditor extends GuiScreen {
     }
 
     @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        if (rebuildPending) {
-            rebuildPending = false;
-            rebuild();
-        }
-
-        this.drawDefaultBackground();
-        this.drawCenteredString(this.fontRendererObj, I18n.format(titleKey), this.width / 2, 12, 0xFFFFFF);
-        this.drawCenteredString(
-            this.fontRendererObj,
-            EnumChatFormatting.DARK_GRAY + I18n.format("radialmenu.lines.hint"),
-            this.width / 2,
-            24,
-            0xFFFFFF);
-
-        for (GuiTextField field : fields) {
-            field.drawTextBox();
-        }
-
-        if (lines.size() > rowsVisible()) {
-            this.drawCenteredString(
-                this.fontRendererObj,
-                (scrollRow + 1) + "-" + Math.min(lines.size(), scrollRow + rowsVisible()) + " / " + lines.size(),
-                this.width / 2,
-                this.height - 62,
-                0x808080);
-        }
-
-        super.drawScreen(mouseX, mouseY, partialTicks);
+    protected void beforeScroll() {
+        captureFields();
     }
 
     @Override
-    public void handleMouseInput() {
-        super.handleMouseInput();
-        int wheel = Mouse.getEventDWheel();
-        if (wheel != 0) {
-            captureFields();
-            int maxScroll = Math.max(0, lines.size() - rowsVisible());
-            int next = Math.max(0, Math.min(maxScroll, scrollRow + (wheel > 0 ? -1 : 1)));
-            if (next != scrollRow) {
-                scrollRow = next;
-                rebuildPending = true;
-            }
+    protected void drawContent(int mouseX, int mouseY, float partialTicks) {
+        int left = contentLeft();
+        for (int i = 0; i < fields.size(); i++) {
+            GuiTextField field = fields.get(i);
+            String number = (fieldLineIndex.get(i)
+                .intValue() + 1) + ".";
+            this.fontRendererObj.drawString(
+                number,
+                left + NUMBER_WIDTH - 4 - this.fontRendererObj.getStringWidth(number),
+                field.yPosition + 3,
+                Ui.TEXT_MUTED);
+            field.drawTextBox();
         }
+    }
+
+    /** The placeholder hint sits with the add button, outside the clip: it is worth reading while typing any line. */
+    @Override
+    protected void drawOverlay(int mouseX, int mouseY, float partialTicks) {
+        this.fontRendererObj.drawString(
+            I18n.format("radialmenu.lines.hint"),
+            contentLeft(),
+            panelBottom - Ui.PAD - Ui.ROW - Ui.GAP - 9,
+            Ui.TEXT_MUTED);
     }
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int button) {
         super.mouseClicked(mouseX, mouseY, button);
+        // A field clipped at the panel edge still answers to clicks on the part that was cut away.
+        if (!isInsideViewport(mouseY)) {
+            return;
+        }
         for (GuiTextField field : fields) {
             field.mouseClicked(mouseX, mouseY, button);
         }
     }
 
     @Override
-    protected void keyTyped(char typedChar, int keyCode) {
-        if (keyCode == Keyboard.KEY_ESCAPE) {
-            GuiStack.pop();
-            return;
-        }
+    protected boolean handleKey(char typedChar, int keyCode) {
         if (keyCode == Keyboard.KEY_RETURN || keyCode == Keyboard.KEY_NUMPADENTER) {
-            addLine();
-            return;
+            // After the focused line rather than at the end, so a list can be filled in from the middle.
+            addLine(focusedLine() + 1);
+            return true;
         }
         for (GuiTextField field : fields) {
             if (field.textboxKeyTyped(typedChar, keyCode)) {
-                return;
+                return true;
             }
         }
-    }
-
-    @Override
-    public void onGuiClosed() {
-        super.onGuiClosed();
-        Keyboard.enableRepeatEvents(false);
-    }
-
-    @Override
-    public boolean doesGuiPauseGame() {
         return false;
+    }
+
+    /** @return the line being typed into, or the last one when nothing has focus */
+    private int focusedLine() {
+        for (int i = 0; i < fields.size(); i++) {
+            if (fields.get(i)
+                .isFocused()) {
+                return fieldLineIndex.get(i)
+                    .intValue();
+            }
+        }
+        return lines.size() - 1;
     }
 }

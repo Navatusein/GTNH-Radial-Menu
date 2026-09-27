@@ -284,6 +284,9 @@ public class MenuNode {
         } else {
             layout = null;
             style = null;
+            if (action != null) {
+                action.normalize();
+            }
         }
     }
 }
