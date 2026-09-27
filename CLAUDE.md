@@ -130,12 +130,16 @@ garbage on this atlas.
 
 ## Status
 
-Working: template setup, mixin accessor, `core/` + 32 tests, profiles with auto-bind and a management GUI, wheel
-rendering and lifecycle, keybind action (tap/toggle/hold), profile-switch action, slot editor, keybind picker, icon
-picker with all three kinds, colour picker, `/radialmenu` command.
+Working: template setup, mixin accessor, `core/` + 43 tests, profiles with auto-bind and a management GUI, wheel
+rendering and lifecycle, keybind action (tap/toggle/hold), profile-switch action, command action (immediate, spaced,
+cycling) with `{player}`-style placeholders, action chains, slot editor, keybind picker, icon picker with all three
+kinds, colour picker, `/radialmenu` command.
 
-Not built yet: command actions, action chains (the `steps` field parses but has no executor), inventory moves,
-backpack integration, mob-effect icons.
+Not built yet: inventory moves, backpack integration, mob-effect icons.
+
+**Sending chat goes through `ChatSender`**, which offers the line to `ClientCommandHandler` before the server.
+`EntityClientPlayerMP.sendChatMessage` posts straight to the server — the client-command hook lives in the chat input
+path, not in the player — so calling it directly would broadcast `/radialmenu …` as chat instead of running it.
 
 ## GUI pitfall, learned the hard way
 
