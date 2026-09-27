@@ -111,11 +111,39 @@ Only the scalar look-and-feel settings use GTNHLib `@Config` in `config/RadialMe
 Gson is 2.2.4 in 1.7.10, which **ignores `@SerializedName` on enum constants** — `LowercaseEnumAdapterFactory`
 handles enum casing instead. Don't reach for the annotation.
 
+## Icons
+
+Three kinds: a registry item, a sprite from the bundled Phosphor sheet, or a PNG from
+`<game folder>/RadialMenu/icons`. Sprites and PNGs take a tint, because Phosphor's glyphs are monochrome.
+
+The sheet is **baked ahead of time** — 1.7.10's font renderer cannot load a TrueType file, so the glyph-rendering
+approach newer radial-menu mods use does not transfer. `tools/GenerateIconAtlas.java` renders it: a single
+dependency-free JDK source file (`java tools/GenerateIconAtlas.java <ttf> <icons.json> <out.png> <out.json>`), since
+neither PIL nor fontTools is installed here.
+
+**That generator is gitignored** (`/tools/`), at the author's request. The committed `phosphor.png` (2048×1024) and
+`icons/phosphor.json` are therefore the source of truth — a clean clone cannot rebuild them. The inputs came from the
+`radial` mod's `assets/radial/font/phosphor.ttf` and `assets/radial/phosphor/icons.json`.
+
+Draw sprites with explicit texture coordinates. `Gui.drawTexturedModalRect` assumes a 256×256 sheet and will produce
+garbage on this atlas.
+
 ## Status
 
-Working: template setup, mixin accessor, `core/` + tests, profiles with auto-bind, wheel rendering and lifecycle,
-keybind action (tap/toggle/hold), profile-switch action, slot editor, keybind picker, item icon picker,
-`/radialmenu` command.
+Working: template setup, mixin accessor, `core/` + 32 tests, profiles with auto-bind and a management GUI, wheel
+rendering and lifecycle, keybind action (tap/toggle/hold), profile-switch action, slot editor, keybind picker, icon
+picker with all three kinds, colour picker, `/radialmenu` command.
 
-Not built yet: profile-management GUI, the bundled Phosphor sprite atlas (`IconSpec.Kind.SPRITE` and `FILE` currently
-draw a tinted placeholder), command actions, action chains, inventory moves, backpack integration.
+Not built yet: command actions, action chains (the `steps` field parses but has no executor), inventory moves,
+backpack integration, mob-effect icons.
+
+## GUI pitfall, learned the hard way
+
+**Never mutate `buttonList` inside `actionPerformed`.** `GuiScreen.mouseClicked` walks the list by index and re-reads
+`size()` every iteration, calling `actionPerformed` from inside that loop — so replacing the list mid-click makes the
+loop continue over the new buttons and fire them too. Adding an auto-bind rule this way inserted two buttons ahead of
+the add button each time, moving it forward faster than the loop index, and the game died with no stack trace.
+Set a `rebuildPending` flag and rebuild at the top of `drawScreen` instead.
+
+Related: returning from a pushed screen re-runs `initGui`, which rebuilds text boxes from the model. Capture what the
+player typed before pushing, or it is silently reverted.
