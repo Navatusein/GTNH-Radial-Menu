@@ -17,6 +17,7 @@ import com.navatusein.radialmenu.client.profile.ProfileStorage;
 import com.navatusein.radialmenu.core.action.ActionField;
 import com.navatusein.radialmenu.core.action.ActionType;
 import com.navatusein.radialmenu.core.action.ActionTypes;
+import com.navatusein.radialmenu.core.action.Placeholders;
 import com.navatusein.radialmenu.core.model.IconSpec;
 import com.navatusein.radialmenu.core.model.MenuNode;
 import com.navatusein.radialmenu.core.model.SlotLayout;
@@ -135,6 +136,7 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
 
         switch (field.kind) {
             case KEYBIND_REF:
+            case MULTILINE_STRING:
             case BOOLEAN:
             case ENUM:
             case PROFILE_REF:
@@ -155,6 +157,11 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
         if (field.kind == ActionField.Kind.KEYBIND_REF) {
             return current == null || current.isEmpty() ? I18n.format("radialmenu.editor.pickKeybind")
                 : I18n.format(current);
+        }
+        if (field.kind == ActionField.Kind.MULTILINE_STRING) {
+            // The text itself will not fit on a button, so show how much of it there is.
+            int count = Placeholders.splitLines(current).length;
+            return I18n.format("radialmenu.editor.editLines", count);
         }
         return current == null ? "" : current;
     }
@@ -224,6 +231,10 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
                 captureInputs();
                 GuiStack.push(new GuiKeyBindPicker(this));
                 return;
+            case MULTILINE_STRING:
+                captureInputs();
+                openLineEditor(field);
+                return;
             case BOOLEAN:
                 draft.action.set(field.key, Boolean.toString(!Boolean.parseBoolean(current)));
                 break;
@@ -237,6 +248,21 @@ public class GuiSlotEditor extends GuiScreen implements GuiKeyBindPicker.Callbac
                 return;
         }
         button.displayString = buttonValueLabel(field, draft.action.getString(field.key, ""));
+    }
+
+    private void openLineEditor(final ActionField field) {
+        GuiStack.push(
+            new GuiMultilineEditor(
+                field.labelKey,
+                draft.action.getString(field.key, ""),
+                new GuiMultilineEditor.Result() {
+
+                    @Override
+                    public void onLinesEdited(String text) {
+                        draft.action.set(field.key, text);
+                        rebuildPending = true;
+                    }
+                }));
     }
 
     private static String next(List<String> options, String current) {

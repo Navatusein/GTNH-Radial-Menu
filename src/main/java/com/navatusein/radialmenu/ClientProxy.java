@@ -6,8 +6,10 @@ import net.minecraftforge.client.ClientCommandHandler;
 import com.gtnewhorizon.gtnhlib.config.ConfigException;
 import com.gtnewhorizon.gtnhlib.config.ConfigurationManager;
 import com.navatusein.radialmenu.client.action.ActionExecutors;
+import com.navatusein.radialmenu.client.action.CommandActionExecutor;
 import com.navatusein.radialmenu.client.action.KeyActionExecutor;
 import com.navatusein.radialmenu.client.action.ProfileSwitchExecutor;
+import com.navatusein.radialmenu.client.action.SequenceExecutor;
 import com.navatusein.radialmenu.client.command.CommandRadialMenu;
 import com.navatusein.radialmenu.client.input.WheelInputHandler;
 import com.navatusein.radialmenu.client.input.WheelKeyBindings;
@@ -39,6 +41,8 @@ public class ClientProxy extends CommonProxy {
         ActionTypes.registerDefaults();
         ActionExecutors.register(new KeyActionExecutor());
         ActionExecutors.register(new ProfileSwitchExecutor());
+        ActionExecutors.register(new CommandActionExecutor());
+        ActionExecutors.register(new SequenceExecutor());
     }
 
     @Override

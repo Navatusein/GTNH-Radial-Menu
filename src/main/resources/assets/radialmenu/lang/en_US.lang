@@ -52,3 +52,13 @@ radialmenu.icons.noMatches=Nothing matches that search
 radialmenu.icons.noFiles=Drop PNG files into RadialMenu/icons, then press R
 
 radialmenu.color.title=Pick a colour
+
+radialmenu.action.command=Send command
+radialmenu.action.command.text=Commands
+radialmenu.action.command.delayTicks=Delay between lines (ticks)
+radialmenu.action.command.cycle=One line per press
+radialmenu.action.sequence=Run a chain
+radialmenu.action.sequence.delayTicks=Delay between steps (ticks)
+radialmenu.editor.editLines=Edit lines (%d)
+radialmenu.lines.add=Add line
+radialmenu.lines.hint=Placeholders: {player} {dim} {x} {y} {z}
