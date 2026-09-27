@@ -84,6 +84,83 @@ public final class ProfileManager {
         ProfileStorage.saveProfile(active());
     }
 
+    /** @return false if the name is unusable or already taken */
+    public static boolean create(String name) {
+        String clean = ProfileStorage.sanitize(name);
+        if (ProfileStorage.exists(clean)) {
+            return false;
+        }
+        Profile profile = Profile.empty(clean);
+        return ProfileStorage.saveProfile(profile);
+    }
+
+    /** Copies a profile under a new name, rules and all. */
+    public static boolean duplicate(String source, String newName) {
+        String clean = ProfileStorage.sanitize(newName);
+        if (ProfileStorage.exists(clean)) {
+            return false;
+        }
+        Profile loaded = ProfileStorage.loadProfile(source);
+        if (loaded == null) {
+            return false;
+        }
+        loaded.name = clean;
+        return ProfileStorage.saveProfile(loaded);
+    }
+
+    public static boolean rename(String oldName, String newName) {
+        String clean = ProfileStorage.sanitize(newName);
+        if (clean.equals(oldName)) {
+            return true;
+        }
+        if (ProfileStorage.exists(clean)) {
+            return false;
+        }
+        Profile loaded = ProfileStorage.loadProfile(oldName);
+        if (loaded == null) {
+            return false;
+        }
+        loaded.name = clean;
+        if (!ProfileStorage.saveProfile(loaded)) {
+            return false;
+        }
+        ProfileStorage.deleteProfile(oldName);
+
+        if (oldName.equals(settings.activeProfile)) {
+            switchTo(clean);
+        }
+        return true;
+    }
+
+    /**
+     * Deletes a profile, moving off it first if it is the active one.
+     *
+     * <p>
+     * Deleting the last profile recreates a starter rather than leaving the mod with nothing to show, since the wheel
+     * has to have something to open onto.
+     */
+    public static boolean delete(String name) {
+        if (!ProfileStorage.exists(name)) {
+            return false;
+        }
+        boolean wasActive = name.equals(activeName());
+        if (!ProfileStorage.deleteProfile(name)) {
+            return false;
+        }
+
+        if (wasActive) {
+            List<String> remaining = ProfileStorage.listProfileNames();
+            if (remaining.isEmpty()) {
+                Profile starter = DefaultProfile.create();
+                ProfileStorage.saveProfile(starter);
+                switchTo(starter.name);
+            } else {
+                switchTo(remaining.get(0));
+            }
+        }
+        return true;
+    }
+
     /**
      * Applies the first auto-bind rule that matches the world the player just joined.
      *

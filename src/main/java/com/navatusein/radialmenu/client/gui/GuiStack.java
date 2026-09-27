@@ -44,4 +44,29 @@ public final class GuiStack {
     public static boolean hasParent() {
         return !STACK.isEmpty();
     }
+
+    private static GuiScreen requested;
+
+    /**
+     * Asks for a screen to be opened on the next client tick.
+     *
+     * <p>
+     * Needed by the chat command: opening a screen from inside command handling fights with the chat screen closing
+     * right afterwards, which would leave the requested screen immediately replaced by null.
+     */
+    public static void requestOpen(GuiScreen screen) {
+        requested = screen;
+    }
+
+    /** Called once per client tick; opens whatever was requested. */
+    public static void openRequested() {
+        if (requested == null) {
+            return;
+        }
+        GuiScreen screen = requested;
+        requested = null;
+        STACK.clear();
+        Minecraft.getMinecraft()
+            .displayGuiScreen(screen);
+    }
 }
