@@ -36,6 +36,7 @@ final class SubmenuFields {
         spec.set(
             ActionTypes.PARAM_HIGHLIGHT_COLOR,
             style == null || style.highlightColor == null ? "" : style.highlightColor);
+        spec.set(ActionTypes.PARAM_BORDER_COLOR, style == null || style.borderColor == null ? "" : style.borderColor);
         return spec;
     }
 
@@ -48,9 +49,12 @@ final class SubmenuFields {
         layout.slots = SlotLayout.clampSlots(spec.getInt(ActionTypes.PARAM_SLOT_COUNT, SlotLayout.DEFAULT_SLOTS));
 
         node.layout = layout;
+        // A submenu has no icon tint of its own - that belongs to the entry, not to the wheel it opens.
         node.style = MenuStyle.of(
             spec.getString(ActionTypes.PARAM_RING_COLOR, ""),
-            spec.getString(ActionTypes.PARAM_HIGHLIGHT_COLOR, ""));
+            spec.getString(ActionTypes.PARAM_HIGHLIGHT_COLOR, ""),
+            null,
+            spec.getString(ActionTypes.PARAM_BORDER_COLOR, ""));
 
         if (node.children == null) {
             node.children = new ArrayList<>();

@@ -18,23 +18,50 @@ import com.navatusein.radialmenu.core.model.Profile;
  *
  * <p>
  * The middle step of the chain: a menu falls back to its profile, and a profile to the mod's config. That is what
- * lets a profile have a look of its own without every submenu repeating it, and what "Inherit" on a submenu now
- * means.
+ * lets a profile have a look of its own without every submenu repeating it, and what "Inherit" on a submenu means.
  */
 public class GuiProfileColors extends UiScreen {
 
-    private static final int ID_RING = 1;
-    private static final int ID_HIGHLIGHT = 2;
-    private static final int ID_ICON = 3;
-    private static final int ID_RESET = 4;
+    /**
+     * The colours a profile can override, in the order they are shown.
+     *
+     * <p>
+     * One description of a row rather than four copies of it: the screen grew a fourth colour and every block had to
+     * be written out again, which is how a row ends up subtly unlike its neighbours.
+     */
+    private enum Swatch {
+
+        RING("ring", true),
+        HIGHLIGHT("highlight", true),
+        ICON("icon", false),
+        BORDER("border", true);
+
+        private final String name;
+
+        /** Whether the picker offers opacity. A tint multiplies a texture, so transparency would only dim it. */
+        private final boolean alpha;
+
+        Swatch(String name, boolean alpha) {
+            this.name = name;
+            this.alpha = alpha;
+        }
+
+        String labelKey() {
+            return "radialmenu.profileColors." + name;
+        }
+    }
+
+    private static final int ID_PICK_BASE = 10;
+    private static final int ID_CLEAR_BASE = 20;
+
+    private static final int CLEAR_WIDTH = 20;
 
     private final String profileName;
 
     private Profile profile;
 
-    private String ringColor;
-    private String highlightColor;
-    private String iconColor;
+    /** Overrides being edited, indexed by {@link Swatch}. Empty means the profile inherits that colour. */
+    private final String[] colors = new String[Swatch.values().length];
 
     public GuiProfileColors(String profileName) {
         this.profileName = profileName;
@@ -57,7 +84,7 @@ public class GuiProfileColors extends UiScreen {
 
     @Override
     protected int panelHeightHint() {
-        return 14 + Ui.STEP * 3 + Ui.ROW;
+        return 14 + Ui.STEP * (Swatch.values().length - 1) + Ui.ROW;
     }
 
     @Override
@@ -69,43 +96,59 @@ public class GuiProfileColors extends UiScreen {
                 return;
             }
             MenuStyle style = profile.style;
-            ringColor = style == null || style.ringColor == null ? "" : style.ringColor;
-            highlightColor = style == null || style.highlightColor == null ? "" : style.highlightColor;
-            iconColor = style == null || style.iconColor == null ? "" : style.iconColor;
+            colors[Swatch.RING.ordinal()] = orEmpty(style == null ? null : style.ringColor);
+            colors[Swatch.HIGHLIGHT.ordinal()] = orEmpty(style == null ? null : style.highlightColor);
+            colors[Swatch.ICON.ordinal()] = orEmpty(style == null ? null : style.iconColor);
+            colors[Swatch.BORDER.ordinal()] = orEmpty(style == null ? null : style.borderColor);
         }
 
         int controlLeft = contentLeft() + Ui.LABEL_WIDTH + Ui.GAP;
-        int controlWidth = contentRight() - controlLeft;
+        int clearLeft = contentRight() - CLEAR_WIDTH;
+        int controlWidth = clearLeft - Ui.GAP - controlLeft;
         int y = contentTop() + 14;
 
-        this.buttonList.add(new GuiButton(ID_RING, controlLeft, y, controlWidth, Ui.ROW, label(ringColor)));
-        tooltip(ID_RING, I18n.format("radialmenu.profileColors.ring.tip"));
-        y += Ui.STEP;
+        for (Swatch swatch : Swatch.values()) {
+            int index = swatch.ordinal();
 
-        this.buttonList.add(new GuiButton(ID_HIGHLIGHT, controlLeft, y, controlWidth, Ui.ROW, label(highlightColor)));
-        tooltip(ID_HIGHLIGHT, I18n.format("radialmenu.profileColors.highlight.tip"));
-        y += Ui.STEP;
+            this.buttonList
+                .add(new GuiButton(ID_PICK_BASE + index, controlLeft, y, controlWidth, Ui.ROW, label(colors[index])));
+            tooltip(ID_PICK_BASE + index, I18n.format(swatch.labelKey() + ".tip"));
 
-        this.buttonList.add(new GuiButton(ID_ICON, controlLeft, y, controlWidth, Ui.ROW, label(iconColor)));
-        tooltip(ID_ICON, I18n.format("radialmenu.profileColors.icon.tip"));
-        y += Ui.STEP;
+            // One colour at a time: clearing all four to put a single one back was a poor trade.
+            GuiButton clear = new GuiButton(ID_CLEAR_BASE + index, clearLeft, y, CLEAR_WIDTH, Ui.ROW, "x");
+            clear.enabled = !colors[index].isEmpty();
+            this.buttonList.add(clear);
+            tooltip(ID_CLEAR_BASE + index, I18n.format("radialmenu.profileColors.clear.tip"));
 
-        GuiButton reset = new GuiButton(
-            ID_RESET,
-            controlLeft,
-            y,
-            controlWidth,
-            Ui.ROW,
-            I18n.format("radialmenu.profileColors.reset"));
-        reset.enabled = !ringColor.isEmpty() || !highlightColor.isEmpty() || !iconColor.isEmpty();
-        this.buttonList.add(reset);
-        tooltip(ID_RESET, I18n.format("radialmenu.profileColors.reset.tip"));
+            y += Ui.STEP;
+        }
 
-        addBottomBar("radialmenu.editor.save", null, "gui.cancel");
+        // The reset used to sit in the column of values with no label beside it, where it read as a fifth colour.
+        // It is a decision about the screen as a whole, so it belongs with the others.
+        addBottomBar("radialmenu.editor.save", "radialmenu.profileColors.reset", "gui.cancel");
+    }
+
+    private static String orEmpty(String value) {
+        return value == null ? "" : value;
     }
 
     private String label(String value) {
-        return value == null || value.isEmpty() ? I18n.format("radialmenu.profileColors.default") : value;
+        return value.isEmpty() ? I18n.format("radialmenu.profileColors.default") : value;
+    }
+
+    /** What the profile falls back to for a colour, which is where the picker should open. */
+    private static String inherited(Swatch swatch) {
+        switch (swatch) {
+            case HIGHLIGHT:
+                return RadialMenuConfig.highlightColor;
+            case ICON:
+                return RadialMenuConfig.iconColor;
+            case BORDER:
+                return RadialMenuConfig.borderColor;
+            case RING:
+            default:
+                return RadialMenuConfig.ringColor;
+        }
     }
 
     @Override
@@ -117,59 +160,43 @@ public class GuiProfileColors extends UiScreen {
             case ID_SECONDARY:
                 onCancel();
                 return;
-            case ID_RESET:
-                // Clearing both is the reset: with nothing of its own, the profile shows the config's colours.
-                ringColor = "";
-                highlightColor = "";
-                iconColor = "";
+            case ID_DANGER:
+                // With nothing of its own, the profile shows the config's colours - that is the whole reset.
+                for (int i = 0; i < colors.length; i++) {
+                    colors[i] = "";
+                }
                 requestRebuild();
-                return;
-            case ID_RING:
-                GuiStack.push(
-                    new GuiColorPicker(
-                        effective(ringColor, RadialMenuConfig.ringColor),
-                        true,
-                        new GuiColorPicker.Result() {
-
-                            @Override
-                            public void onColorPicked(String hex) {
-                                ringColor = hex;
-                                requestRebuild();
-                            }
-                        }));
-                return;
-            case ID_HIGHLIGHT:
-                GuiStack.push(
-                    new GuiColorPicker(
-                        effective(highlightColor, RadialMenuConfig.highlightColor),
-                        true,
-                        new GuiColorPicker.Result() {
-
-                            @Override
-                            public void onColorPicked(String hex) {
-                                highlightColor = hex;
-                                requestRebuild();
-                            }
-                        }));
-                return;
-            case ID_ICON:
-                // No opacity here: a tint multiplies a texture, so transparency would only dim it.
-                GuiStack.push(
-                    new GuiColorPicker(
-                        effective(iconColor, RadialMenuConfig.iconColor),
-                        false,
-                        new GuiColorPicker.Result() {
-
-                            @Override
-                            public void onColorPicked(String hex) {
-                                iconColor = hex;
-                                requestRebuild();
-                            }
-                        }));
                 return;
             default:
                 break;
         }
+
+        Swatch[] swatches = Swatch.values();
+
+        int clearIndex = button.id - ID_CLEAR_BASE;
+        if (clearIndex >= 0 && clearIndex < swatches.length) {
+            colors[clearIndex] = "";
+            requestRebuild();
+            return;
+        }
+
+        int pickIndex = button.id - ID_PICK_BASE;
+        if (pickIndex >= 0 && pickIndex < swatches.length) {
+            pick(swatches[pickIndex]);
+        }
+    }
+
+    private void pick(Swatch swatch) {
+        final int index = swatch.ordinal();
+        GuiStack.push(
+            new GuiColorPicker(effective(colors[index], inherited(swatch)), swatch.alpha, new GuiColorPicker.Result() {
+
+                @Override
+                public void onColorPicked(String hex) {
+                    colors[index] = hex;
+                    requestRebuild();
+                }
+            }));
     }
 
     /** Opens the picker on what the profile actually shows, not on a blank, so editing starts from what is there. */
@@ -178,7 +205,11 @@ public class GuiProfileColors extends UiScreen {
     }
 
     private void save() {
-        profile.style = MenuStyle.of(ringColor, highlightColor, iconColor);
+        profile.style = MenuStyle.of(
+            colors[Swatch.RING.ordinal()],
+            colors[Swatch.HIGHLIGHT.ordinal()],
+            colors[Swatch.ICON.ordinal()],
+            colors[Swatch.BORDER.ordinal()]);
         ProfileStorage.saveProfile(profile);
 
         // The edited profile may be the one loaded in memory; reload so the wheel shows it straight away.
@@ -194,10 +225,9 @@ public class GuiProfileColors extends UiScreen {
         Ui.sectionHeader(I18n.format("radialmenu.profileColors.section"), left, contentTop(), contentRight());
 
         int y = contentTop() + 14;
-        Ui.rowLabel(I18n.format("radialmenu.profileColors.ring"), left, y);
-        y += Ui.STEP;
-        Ui.rowLabel(I18n.format("radialmenu.profileColors.highlight"), left, y);
-        y += Ui.STEP;
-        Ui.rowLabel(I18n.format("radialmenu.profileColors.icon"), left, y);
+        for (Swatch swatch : Swatch.values()) {
+            Ui.rowLabel(I18n.format(swatch.labelKey()), left, y);
+            y += Ui.STEP;
+        }
     }
 }
