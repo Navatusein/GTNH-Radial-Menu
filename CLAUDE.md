@@ -102,52 +102,76 @@ entire keyboard/mouse block on `currentScreen == null || currentScreen.allowUser
 stops moving. Opening any screen still runs `unPressAllKeys()` once, so a key already held goes dead; `HeldKeyResync`
 re-applies physical state right after the screen becomes current.
 
-## Storage
+## Interface
 
-Menus live in `<game folder>/RadialMenu/`, not `config/` — one file per profile under `profiles/`, plus
-`settings.json` and `icons/`. Auto-bind rules live *inside* each profile so copying the file carries them along.
-Only the scalar look-and-feel settings use GTNHLib `@Config` in `config/RadialMenu/`.
-
-Gson is 2.2.4 in 1.7.10, which **ignores `@SerializedName` on enum constants** — `LowercaseEnumAdapterFactory`
-handles enum casing instead. Don't reach for the annotation.
-
-## Icons
-
-Three kinds: a registry item, a sprite from the bundled Phosphor sheet, or a PNG from
-`<game folder>/RadialMenu/icons`. Sprites and PNGs take a tint, because Phosphor's glyphs are monochrome.
-
-The sheet is **baked ahead of time** — 1.7.10's font renderer cannot load a TrueType file, so the glyph-rendering
-approach newer radial-menu mods use does not transfer. `tools/GenerateIconAtlas.java` renders it: a single
-dependency-free JDK source file (`java tools/GenerateIconAtlas.java <ttf> <icons.json> <out.png> <out.json>`), since
-neither PIL nor fontTools is installed here.
-
-**That generator is gitignored** (`/tools/`), at the author's request. The committed `phosphor.png` (2048×1024) and
-`icons/phosphor.json` are therefore the source of truth — a clean clone cannot rebuild them. The inputs came from the
-`radial` mod's `assets/radial/font/phosphor.ttf` and `assets/radial/phosphor/icons.json`.
-
-Draw sprites with explicit texture coordinates. `Gui.drawTexturedModalRect` assumes a 256×256 sheet and will produce
-garbage on this atlas.
-
-## Status
-
-Working: template setup, mixin accessor, `core/` + 43 tests, profiles with auto-bind and a management GUI, wheel
-rendering and lifecycle, keybind action (tap/toggle/hold), profile-switch action, command action (immediate, spaced,
-cycling) with `{player}`-style placeholders, action chains, slot editor, keybind picker, icon picker with all three
-kinds, colour picker, `/radialmenu` command.
-
-Not built yet: inventory moves, backpack integration, mob-effect icons.
-
-**Sending chat goes through `ChatSender`**, which offers the line to `ClientCommandHandler` before the server.
-`EntityClientPlayerMP.sendChatMessage` posts straight to the server — the client-command hook lives in the chat input
-path, not in the player — so calling it directly would broadcast `/radialmenu …` as chat instead of running it.
-
-## GUI pitfall, learned the hard way
+Every screen extends `UiScreen` and takes its measurements from `Ui`. That exists because each screen used to carry
+its own hardcoded offsets, which is why buttons jumped between screens and gaps never matched. `UiScreen` owns the
+framed panel, the scrolling, and a button bar pinned a fixed distance from the bottom edge; `UiList` owns the row
+arithmetic. Put anything positional in `Ui`, never in a screen.
 
 **Never mutate `buttonList` inside `actionPerformed`.** `GuiScreen.mouseClicked` walks the list by index and re-reads
 `size()` every iteration, calling `actionPerformed` from inside that loop — so replacing the list mid-click makes the
-loop continue over the new buttons and fire them too. Adding an auto-bind rule this way inserted two buttons ahead of
-the add button each time, moving it forward faster than the loop index, and the game died with no stack trace.
-Set a `rebuildPending` flag and rebuild at the top of `drawScreen` instead.
+loop continue over the new buttons and fire them too. Adding an auto-bind rule that way inserted two buttons ahead of
+the add button each time, moving it forward faster than the loop index, and the game died with no stack trace. Call
+`requestRebuild()` instead; it rebuilds before the next frame.
 
-Related: returning from a pushed screen re-runs `initGui`, which rebuilds text boxes from the model. Capture what the
-player typed before pushing, or it is silently reverted.
+Other traps the same code has already fallen into:
+
+- Returning from a pushed screen re-runs `initGui`, which rebuilds text fields from the model. Capture what the
+  player typed before pushing, and in `beforeScroll()` — scrolling rebuilds too, and silently discarded input.
+- A `GuiTextField` works out its horizontal scroll from the width it has **when the text is set**. Built at a
+  placeholder size and resized afterwards, it renders blank until clicked. Build it at its real size.
+- Rows scrolled out of the panel must stop being drawn *and* clickable. Screens with variable-length lists build only
+  the rows that fit, so buttons and fields cannot disagree about where the edge is.
+- Scrolling moves a whole row at a time, so a panel whose height is not a multiple of the row step keeps a remainder
+  that migrates between top and bottom. `snapPanelToRows()` trims the panel instead.
+
+## Icons and colours
+
+Icons come in three kinds: a registry item, a sprite from the bundled Phosphor sheet, or a PNG from
+`<game folder>/RadialMenu/icons`.
+
+**Draw items with the content, before any button.** `IconRenderer` copies the state sequence `GuiContainer` uses
+around its slots, including `GL_RESCALE_NORMAL` and forcing the lightmap to full brightness. A block is drawn scaled
+ten times, so without the former the scale lands in the normals and the lighting is computed against the wrong ones —
+flat sprites ignore lighting and look fine, which makes the symptom look selective and sent two earlier diagnoses
+astray. Drawing an item *after* a vanilla button inherits state that dims it; put a preview beside a button, not on
+it.
+
+The sheet is **baked ahead of time** — 1.7.10's font renderer cannot load a TrueType file, so the glyph approach
+newer radial-menu mods use does not transfer. `tools/GenerateIconAtlas.java` renders it, dependency-free from a JDK.
+**That generator is gitignored** at the author's request, so the committed `phosphor.png` (2048×1024) and
+`icons/phosphor.json` are the source of truth — a clean clone cannot rebuild them.
+
+Draw sprites with explicit texture coordinates; `Gui.drawTexturedModalRect` assumes a 256×256 sheet.
+
+**Colours inherit: menu → profile → mod config.** `core/Colors` owns the parsing, because it was duplicated in the
+renderer and in `IconSpec` and had drifted. The colour picker writes `#RRGGBB` while the config writes
+`0xAARRGGBB`, so a six-digit value read as eight is alpha zero — that is how a chosen ring colour once turned the
+ring invisible. `Colors.over` layers an override on a resolved colour and keeps the inherited opacity when the
+override has none.
+
+Icon tints distinguish two kinds of blank: **null keeps the artwork's own colours** (the PNG tab's checkbox), while
+**empty means inherit**. Collapsing both to white is the bug to avoid.
+
+## Profiles
+
+Menus live in `<game folder>/RadialMenu/`, not `config/` — one file per profile under `profiles/`, plus
+`settings.json` and `icons/`. Auto-bind rules live *inside* each profile so copying the file carries them.
+
+Renaming a profile to a different capitalisation is a rename of the same file on Windows, not a collision — check
+`ProfileStorage.isSameFile` before refusing, and rename through a temporary name. Writing the new file and deleting
+the old one would delete the file just written.
+
+Gson is 2.2.4 in 1.7.10, which **ignores `@SerializedName` on enum constants** — `LowercaseEnumAdapterFactory`
+handles enum casing instead.
+
+## Status
+
+Working: template setup, mixin accessor, `core/` + 77 tests, profiles with auto-bind, colours and a management GUI,
+wheel rendering and lifecycle, keybind action (tap/toggle/hold), profile-switch action, command action with
+placeholders, action chains, submenu-as-action-type with per-menu layout and colours, entry reordering, the full
+editor, and `/radialmenu`.
+
+Not built yet: inventory moves, backpack integration, mob-effect icons, pixel-smooth scrolling (it steps a row at a
+time; smooth needs `glScissor` clipping in `UiScreen`).
