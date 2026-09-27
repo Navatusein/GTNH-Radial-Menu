@@ -48,6 +48,12 @@ public class GuiIconPicker extends UiScreen {
 
     private static final int CELL = 20;
 
+    /** Enough for the swatch and a six-digit hex beside it. */
+    private static final int COLOR_WIDTH = 66;
+
+    /** Room under the grid for the name of the icon being hovered. */
+    private static final int NAME_HEIGHT = 10;
+
     private final Callback callback;
 
     private Tab tab = Tab.ITEMS;
@@ -117,7 +123,15 @@ public class GuiIconPicker extends UiScreen {
 
         // Search first, then the tabs. A selected tab deliberately has no bottom edge so it joins the sheet below
         // it, so anything between the two reads as a mistake.
-        searchField = new GuiTextField(this.fontRendererObj, left + 1, y + 3, contentWidth() - 94, 14);
+        //
+        // Measured from the right edge inwards, each control from the one beside it. Three independent offsets left
+        // the gaps at three pixels on one side of the colour button and four on the other - the sort of difference
+        // that is invisible to write and obvious to look at.
+        int refreshLeft = contentRight() - Ui.ROW;
+        int colorLeft = refreshLeft - Ui.GAP - COLOR_WIDTH;
+        int searchWidth = colorLeft - Ui.GAP - left;
+
+        searchField = new GuiTextField(this.fontRendererObj, left + 1, y + 3, searchWidth - 2, 14);
         searchField.setMaxStringLength(64);
         searchField.setText(query);
         searchField.setCursorPositionEnd();
@@ -125,12 +139,12 @@ public class GuiIconPicker extends UiScreen {
 
         // Blank label: the swatch and the hex are drawn together in the overlay, because a centred button label
         // would sit underneath the swatch.
-        GuiButton colorButton = new GuiButton(ID_COLOR, contentRight() - 90, y, 66, Ui.ROW, "");
+        GuiButton colorButton = new GuiButton(ID_COLOR, colorLeft, y, COLOR_WIDTH, Ui.ROW, "");
         // Only sprites and untinted-by-choice PNGs take a colour; an item would ignore it.
         colorButton.enabled = tab != Tab.ITEMS && !(tab == Tab.FILES && originalColors);
         this.buttonList.add(colorButton);
         tooltip(ID_COLOR, I18n.format("radialmenu.icons.color.tip"));
-        this.buttonList.add(new GuiButton(ID_REFRESH, contentRight() - 20, y, 20, Ui.ROW, "R"));
+        this.buttonList.add(new GuiButton(ID_REFRESH, refreshLeft, y, Ui.ROW, Ui.ROW, "R"));
         tooltip(ID_REFRESH, I18n.format("radialmenu.icons.refresh.tip"));
 
         y += Ui.STEP;
@@ -174,8 +188,14 @@ public class GuiIconPicker extends UiScreen {
         addBottomBar("gui.cancel", null, null);
     }
 
+    /** The hovered name is drawn below the grid, so it gets a line of its own rather than the panel's padding. */
+    @Override
+    protected int footerHeight() {
+        return NAME_HEIGHT;
+    }
+
     private int gridBottom() {
-        return panelBottom - Ui.PAD;
+        return viewportBottom();
     }
 
     private int rowsVisible() {
@@ -312,7 +332,12 @@ public class GuiIconPicker extends UiScreen {
         }
 
         if (hoveredName != null) {
-            this.drawCenteredString(this.fontRendererObj, hoveredName, this.width / 2, gridBottom() + 2, 0xFFFFFF80);
+            this.drawCenteredString(
+                this.fontRendererObj,
+                hoveredName,
+                this.width / 2,
+                gridBottom() + Ui.GAP,
+                0xFFFFFF80);
         }
     }
 

@@ -129,6 +129,13 @@ Other traps the same code has already fallen into:
   placeholder size and resized afterwards, it renders blank until clicked. Build it at its real size.
 - Rows scrolled out of the panel must stop being drawn *and* clickable. Screens with variable-length lists build only
   the rows that fit, so buttons and fields cannot disagree about where the edge is.
+- **A framed box is drawn at `viewportLeft/Right/Top/Bottom`, and its content indents from that by `Ui.GAP`.** Never
+  measure a box from the panel or from the content column directly: those were two competing definitions, one of them
+  off by a gap, and the result was screens with visibly different padding for the same thing. `panelHeightHint()` is
+  the height of the *content*, and `UiScreen` adds the title band, the frame gap and the padding.
+- **The clip runs only on screens with a framed viewport.** It exists to stop a scrolling row spilling past the
+  frame; applied to a screen that frames its own box inside `drawContent`, it cut the top and bottom edges off that
+  box instead — the profile list drew with no bottom border and so looked bottomless.
 - Scrolling is pixel-smooth, clipped with `glScissor` — which works in real window pixels from the bottom-left while
   everything else is in scaled GUI pixels from the top-left, so both axes are converted through `ScaledResolution`.
 - **What scrolls is declared, not inferred.** `addBottomBar` and `markFooter` name the chrome; everything else is

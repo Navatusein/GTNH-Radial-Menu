@@ -231,11 +231,8 @@ public class GuiMultilineEditor extends UiScreen {
     /** The placeholder hint sits with the add button, outside the clip: it is worth reading while typing any line. */
     @Override
     protected void drawOverlay(int mouseX, int mouseY, float partialTicks) {
-        this.fontRendererObj.drawString(
-            I18n.format("radialmenu.lines.hint"),
-            contentLeft(),
-            panelBottom - Ui.PAD - Ui.ROW - Ui.GAP - 9,
-            Ui.TEXT_MUTED);
+        this.fontRendererObj
+            .drawString(I18n.format("radialmenu.lines.hint"), contentLeft(), viewportBottom() + Ui.GAP, Ui.TEXT_MUTED);
     }
 
     @Override
