@@ -12,6 +12,7 @@ import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
+import net.minecraft.potion.Potion;
 import net.minecraft.util.ResourceLocation;
 
 import org.lwjgl.opengl.GL11;
@@ -62,6 +63,9 @@ public final class IconRenderer {
                 break;
             case FILE:
                 drawFile(icon, x, y, size);
+                break;
+            case EFFECT:
+                drawEffect(icon, x, y, size);
                 break;
             default:
                 break;
@@ -160,6 +164,41 @@ public final class IconRenderer {
             SpriteAtlas.minV(sprite),
             SpriteAtlas.maxU(sprite),
             SpriteAtlas.maxV(sprite));
+    }
+
+    /**
+     * An effect icon, cut out of the sheet vanilla draws the inventory's effect list from.
+     *
+     * <p>
+     * Untinted, like an item: the artwork is already coloured, and a tint would only muddy it. Only the monochrome
+     * sprite set has a colour to gain from one.
+     */
+    private static void drawEffect(IconSpec icon, int x, int y, int size) {
+        Potion potion = PotionIcons.find(icon.id);
+        if (potion == null) {
+            return;
+        }
+        // Vanilla's order, and it is load-bearing: bind the vanilla sheet first, then ask for the index. A modded
+        // effect overrides getStatusIconIndex to rebind its own texture on the way out, so asking first and binding
+        // afterwards would throw that away and cut the mod's index out of vanilla's sheet - a neighbouring icon,
+        // drawn with confidence.
+        Minecraft.getMinecraft()
+            .getTextureManager()
+            .bindTexture(PotionIcons.TEXTURE);
+        int index = potion.getStatusIconIndex();
+        if (index < 0) {
+            return;
+        }
+
+        drawTexturedQuad(
+            x,
+            y,
+            size,
+            0xFFFFFF,
+            PotionIcons.minU(index),
+            PotionIcons.minV(index),
+            PotionIcons.maxU(index),
+            PotionIcons.maxV(index));
     }
 
     private static void drawFile(IconSpec icon, int x, int y, int size) {

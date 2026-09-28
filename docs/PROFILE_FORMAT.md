@@ -116,6 +116,7 @@ That puts "Top" at 12 o'clock and, on an 8-slot wheel, "Bottom" at 4:30. The `nu
 "icon": { "kind": "item", "id": "minecraft:torch", "meta": 0 }
 "icon": { "kind": "sprite", "id": "phosphor:feather", "color": "#7FD4FF" }
 "icon": { "kind": "file", "id": "backpack.png" }
+"icon": { "kind": "effect", "id": "potion.moveSpeed" }
 ```
 
 | `kind` | `id` | Notes |
@@ -123,6 +124,7 @@ That puts "Top" at 12 o'clock and, on an 8-slot wheel, "Bottom" at 4:30. The `nu
 | `"item"` | Registry name, e.g. `minecraft:diamond_pickaxe`, `gregtech:gt.metaitem.01` | `meta` selects the damage/metadata variant, default `0`. Items keep their own colours; `color` is ignored. |
 | `"sprite"` | `phosphor:<name>` | 1512 bundled monochrome icons. Names are listed in `assets/radialmenu/icons/phosphor.json` inside the jar — e.g. `phosphor:sword`, `phosphor:axe`, `phosphor:gear`, `phosphor:house`. The `phosphor:` prefix is required. |
 | `"file"` | File name inside `RadialMenu/icons/` | e.g. `backpack.png`. The player has to put the file there. |
+| `"effect"` | A potion's unlocalized name, e.g. `potion.moveSpeed`, `potion.nightVision` | Drawn from the sheet vanilla uses for the inventory's effect list, so modded effects work too. Identified by name rather than id, which shifts between packs. Carries its own colours; `color` is ignored. |
 
 `color` applies to `sprite` and `file` only, as `#RRGGBB`:
 

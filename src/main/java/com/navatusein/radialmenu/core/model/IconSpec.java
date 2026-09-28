@@ -24,7 +24,11 @@ public class IconSpec {
 
         /** A PNG the player dropped into the mod's {@code icons} folder. */
         @SerializedName("file")
-        FILE
+        FILE,
+
+        /** A status effect, drawn from the sheet vanilla uses for the effect list in the inventory. */
+        @SerializedName("effect")
+        EFFECT
     }
 
     public Kind kind = Kind.ITEM;
@@ -58,6 +62,14 @@ public class IconSpec {
         IconSpec icon = new IconSpec();
         icon.kind = Kind.FILE;
         icon.id = fileName;
+        return icon;
+    }
+
+    /** @param effectName the potion's unlocalized name, which is stable where its numeric id is not */
+    public static IconSpec effect(String effectName) {
+        IconSpec icon = new IconSpec();
+        icon.kind = Kind.EFFECT;
+        icon.id = effectName;
         return icon;
     }
 
