@@ -203,6 +203,13 @@ newer radial-menu mods use does not transfer. `tools/GenerateIconAtlas.java` ren
 
 Draw sprites with explicit texture coordinates; `Gui.drawTexturedModalRect` assumes a 256×256 sheet.
 
+**An item's own renderer can throw, and it is not ours to fix.** Binnie's gene items ask their breeding system for a
+colour and NPE when there is none, which there is not on the bare meta-0 stack the picker builds — it killed the
+client mid-scroll, and would do the same in the world if such an item were an entry's icon. `IconRenderer` catches
+it, restores the matrix and lighting in a `finally` (the throw comes from inside the item renderer, so neither would
+unwind on its own), and **remembers the item**: the picker redraws every frame, so merely catching would mean sixty
+stack traces a second.
+
 The ring is drawn as full-width sectors with a line on each boundary and an edge at each radius. It used to draw the
 sectors a couple of degrees narrow instead, leaving wedges of bare world between them — which also made the wheel lie
 about itself, since the angle a click resolves to never knew about the gaps and aiming at one still picked a

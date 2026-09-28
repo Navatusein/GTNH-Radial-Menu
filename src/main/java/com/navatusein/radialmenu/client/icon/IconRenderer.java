@@ -1,7 +1,9 @@
 package com.navatusein.radialmenu.client.icon;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.OpenGlHelper;
@@ -15,6 +17,7 @@ import net.minecraft.util.ResourceLocation;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
 
+import com.navatusein.radialmenu.RadialMenuMod;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.config.RadialMenuConfig;
 import com.navatusein.radialmenu.core.Colors;
@@ -35,6 +38,9 @@ public final class IconRenderer {
     private static final Map<String, ItemStack> ITEM_CACHE = new HashMap<>();
 
     private static final ItemStack MISSING = new ItemStack(Item.getItemById(0));
+
+    /** Items whose own renderer threw. Drawing one is left to the mod that owns it, and some of them cannot. */
+    private static final Set<String> UNRENDERABLE = new HashSet<>();
 
     private IconRenderer() {}
 
@@ -63,6 +69,9 @@ public final class IconRenderer {
     }
 
     private static void drawItem(IconSpec icon, int x, int y) {
+        if (UNRENDERABLE.contains(key(icon))) {
+            return;
+        }
         ItemStack stack = resolveItem(icon);
         if (stack == null || stack == MISSING) {
             return;
@@ -82,13 +91,27 @@ public final class IconRenderer {
         OpenGlHelper.setLightmapTextureCoords(OpenGlHelper.lightmapTexUnit, 240.0F, 240.0F);
         GL11.glColor4f(1.0F, 1.0F, 1.0F, 1.0F);
 
-        RenderItem.getInstance()
-            .renderItemAndEffectIntoGUI(mc.fontRenderer, mc.getTextureManager(), stack, x, y);
-
-        RenderHelper.disableStandardItemLighting();
-        GL11.glDisable(GL12.GL_RESCALE_NORMAL);
-        GL11.glDisable(GL11.GL_DEPTH_TEST);
-        GL11.glPopMatrix();
+        try {
+            RenderItem.getInstance()
+                .renderItemAndEffectIntoGUI(mc.fontRenderer, mc.getTextureManager(), stack, x, y);
+        } catch (Throwable failure) {
+            // Not every registered item can be drawn as a bare stack. Binnie's gene items ask their own breeding
+            // system for a colour and throw when there is none, which there is not on a plain meta-0 stack - and
+            // that took the client down mid-scroll through the picker, and would do the same in the world if such
+            // an item were an entry's icon.
+            //
+            // Remembered rather than merely caught: the picker redraws every frame, so without this the log fills
+            // at sixty stack traces a second and the cost is paid again on every one.
+            UNRENDERABLE.add(key(icon));
+            RadialMenuMod.LOG.warn("Item '" + icon.id + "' cannot be drawn as an icon", failure);
+        } finally {
+            // In a finally because the throw comes from the middle of the item renderer: without this the matrix
+            // stays pushed and the lighting on, and the next thing drawn inherits both.
+            RenderHelper.disableStandardItemLighting();
+            GL11.glDisable(GL12.GL_RESCALE_NORMAL);
+            GL11.glDisable(GL11.GL_DEPTH_TEST);
+            GL11.glPopMatrix();
+        }
     }
 
     /**
@@ -178,8 +201,13 @@ public final class IconRenderer {
         GL11.glDisable(GL11.GL_BLEND);
     }
 
+    /** Identifies an item icon, so the cache and the unrenderable list agree on what "the same item" means. */
+    private static String key(IconSpec icon) {
+        return icon.id + "#" + icon.meta;
+    }
+
     private static ItemStack resolveItem(IconSpec icon) {
-        String key = icon.id + "#" + icon.meta;
+        String key = key(icon);
         ItemStack cached = ITEM_CACHE.get(key);
         if (cached != null) {
             return cached;
