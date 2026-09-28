@@ -115,12 +115,19 @@ public class GuiRadialWheel extends GuiScreen {
         return !RadialMenuConfig.rightClickToEdit && isShiftKeyDown();
     }
 
-    /** Path from the root menu to the one on screen, for the header. */
+    /**
+     * Path from the root menu to the one on screen, for the header.
+     *
+     * <p>
+     * The root itself is left out: the header already names the profile, and a root titled after its profile - which
+     * is what {@code Profile.empty} creates and what a generated file tends to carry - read as "default > default >
+     * Overlays".
+     */
     private String breadcrumb() {
         StringBuilder builder = new StringBuilder();
         MenuNode[] nodes = path.toArray(new MenuNode[0]);
         // The deque has the current menu first, so walk it backwards to read root-to-here.
-        for (int i = nodes.length - 1; i >= 0; i--) {
+        for (int i = nodes.length - 2; i >= 0; i--) {
             String title = nodes[i].title;
             if (title == null || title.isEmpty()) {
                 continue;
