@@ -330,11 +330,18 @@ handles enum casing instead.
 
 ## Status
 
-Working: template setup, mixin accessor, `core/` + 77 tests, profiles with auto-bind, colours and a management GUI,
-wheel rendering and lifecycle, keybind action (tap/toggle/hold), profile-switch action, command action with
-placeholders, action chains, submenu-as-action-type with per-menu layout and colours, entry reordering, the full
-editor, and `/radialmenu`.
+Working: template setup, mixin accessor, `core/` + 114 tests, profiles with auto-bind, wheel rendering and
+lifecycle, keybind action (tap/toggle/hold), profile-switch action, command action with placeholders, action chains,
+submenu-as-action-type with per-menu layout and colours, entry reordering, the full editor, and `/radialmenu`.
 
-Not built yet: inventory moves, backpack integration. `GuiMenuSettings` still carries its own copy
-of the generated-field code rather than sharing `GuiActionEditor`'s; it edits a node through `SubmenuFields` rather
-than an action, so the two have not been merged.
+The wheel's look is settled: six colours down the config → profile → menu chain, an accent that fills them in, a
+linear sector gap, a one-pixel soft edge, an outline the highlighted sector gets to itself, an optional wash behind
+the screen, vanilla slot plates under the icons, selection by scrolling, and six ways for the wheel to arrive.
+Settings are four categories plus animation, reachable from the Mods screen.
+
+Not built yet: inventory moves, backpack integration.
+
+`GuiMenuSettings` and `GuiActionEditor` are still two screens with two layout loops, but they no longer disagree:
+every per-field decision - which widget, what the button says, whether the picker offers opacity, whether the row is
+editable - lives in `FieldControls`, so a new field kind is added once. Merging the loops themselves is the
+remaining half.
