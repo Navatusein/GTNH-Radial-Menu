@@ -98,6 +98,14 @@ breaks whenever the receiving handler opens a GUI of its own (AdventureBackpack2
 restoring `currentScreen` afterwards clobbers it. Closing first also genuinely restores `inGameHasFocus`, which
 AdventureBackpack2 checks before reacting at all.
 
+**`keepOpen` costs you every mod that checks `currentScreen`.** An entry with `keepOpen` leaves the wheel up, so
+step 3's close never happens and the injection lands while a screen is open. NEI only acts on its own keys
+(`world.chunkoverlay`, `world.moboverlay`) when no screen is open, so such an entry does nothing at all — and
+nothing is logged, because the injection genuinely succeeded and it is the *receiver* that declined. Found on a real
+pack 2026-09-28; the fix was to drop `keepOpen` from those entries. **First thing to try when a `keepOpen` entry is
+silent is turning `keepOpen` off.** Reopening the wheel after the action would need to check `currentScreen == null`
+first, or it would clobber a GUI the receiving mod had just opened.
+
 Two screen flags matter: `doesGuiPauseGame()` must return false, and `allowUserInput` must be set — 1.7.10 gates its
 entire keyboard/mouse block on `currentScreen == null || currentScreen.allowUserInput`, so without it the player
 stops moving. Opening any screen still runs `unPressAllKeys()` once, so a key already held goes dead; `HeldKeyResync`
