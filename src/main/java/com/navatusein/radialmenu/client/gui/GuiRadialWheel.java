@@ -14,9 +14,11 @@ import com.navatusein.radialmenu.client.gui.editor.GuiSlotEditor;
 import com.navatusein.radialmenu.client.input.HeldKeyResync;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.config.RadialMenuConfig;
+import com.navatusein.radialmenu.config.WheelConfig;
 import com.navatusein.radialmenu.core.geometry.RadialGeometry;
 import com.navatusein.radialmenu.core.model.MenuNode;
 import com.navatusein.radialmenu.core.model.SlotLayout;
+import com.navatusein.radialmenu.core.model.WheelColors;
 
 /**
  * The wheel itself.
@@ -42,7 +44,17 @@ public class GuiRadialWheel extends GuiScreen {
      */
     private boolean sticky;
 
+    /** What is selected: where the cursor points, or what the wheel was turned to. */
     private int hoveredSlot = RadialGeometry.NO_SLOT;
+
+    /**
+     * What the cursor is over, whether or not that is what selects.
+     *
+     * <p>
+     * Editing stays a pointing job even when choosing is not: the dead zone in the middle is how a menu's own
+     * settings are reached, and a selection driven by the scroll wheel never sits in it.
+     */
+    private int pointerSlot = RadialGeometry.NO_SLOT;
 
     public GuiRadialWheel() {
         this.allowUserInput = RadialMenuConfig.allowInputWhileOpen;
@@ -82,15 +94,37 @@ public class GuiRadialWheel extends GuiScreen {
         boolean editMode = isEditModifierDown();
         int slotCount = sectorCount(menu, editMode);
 
-        hoveredSlot = RadialGeometry
-            .slotAtPoint(centerX, centerY, mouseX, mouseY, slotCount, 0.0, RadialMenuConfig.effectiveInnerRadius());
+        pointerSlot = RadialGeometry
+            .slotAtPoint(centerX, centerY, mouseX, mouseY, slotCount, 0.0, WheelConfig.effectiveInnerRadius());
 
-        WheelRenderer.drawWheel(menu, slotCount, centerX, centerY, hoveredSlot, editMode);
+        if (RadialMenuConfig.scrollToSelect) {
+            // The wheel decides what is selected, so the cursor does not - but the selection still has to survive a
+            // menu whose sector count just changed under it.
+            hoveredSlot = slotCount <= 0 ? RadialGeometry.NO_SLOT : Math.min(hoveredSlot, slotCount - 1);
+            if (hoveredSlot < 0 && slotCount > 0) {
+                hoveredSlot = 0;
+            }
+        } else {
+            hoveredSlot = pointerSlot;
+        }
+
+        // Resolved once and shared, so the wash behind the wheel and the wheel itself cannot disagree about which
+        // menu's colours they are drawing.
+        WheelColors colors = WheelRenderer.colorsFor(menu, editMode);
+        // The switch is the master and the colour is only what it draws with, so a profile that carries a background
+        // colour does not quietly turn the wash back on for someone who wanted it off.
+        if (WheelConfig.dimBackground && (colors.background >>> 24) != 0) {
+            // Not drawDefaultBackground(): that one is vanilla's fixed gradient, and the point here is a colour the
+            // player chose - including none at all, which is the default and leaves the world untouched.
+            drawRect(0, 0, this.width, this.height, colors.background);
+        }
+
+        WheelRenderer.drawWheel(menu, colors, slotCount, centerX, centerY, hoveredSlot, editMode);
         WheelRenderer.drawHeader(this.width, ProfileManager.activeName(), breadcrumb(), editMode);
         // Only while the cursor is actually in the dead zone: elsewhere the centre belongs to the hovered entry's
         // name, and the two were drawing on top of each other.
-        if (editMode && hoveredSlot == RadialGeometry.NO_SLOT) {
-            WheelRenderer.drawCenterHint(centerX, centerY);
+        if (editMode && pointerSlot == RadialGeometry.NO_SLOT) {
+            WheelRenderer.drawCenterHint(menu, centerX, centerY, hoveredSlot);
         }
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
@@ -147,7 +181,7 @@ public class GuiRadialWheel extends GuiScreen {
         if (editRequested) {
             // The dead zone is the menu itself rather than any one entry, so editing there edits the menu - which is
             // also the only way to reach the root menu's settings.
-            if (hoveredSlot == RadialGeometry.NO_SLOT) {
+            if (pointerSlot == RadialGeometry.NO_SLOT) {
                 GuiStack.push(new GuiMenuSettings(currentMenu()));
             } else {
                 openEditor();
@@ -167,15 +201,45 @@ public class GuiRadialWheel extends GuiScreen {
      * Opens the editor for the sector under the cursor, empty or not - that is how a new entry gets added.
      *
      * <p>
-     * Sectors and list positions are not the same thing on a dynamic wheel, so the sector is translated first.
+     * Sectors and list positions are not the same thing on a dynamic wheel, so the sector is translated first and
+     * the editor is handed a list position throughout.
+     *
+     * <p>
+     * An empty sector is a new entry: on a fixed wheel it is the position that sector stands for, on a dynamic one
+     * the end of the list, which is where that wheel puts its extra sector.
      */
     private void openEditor() {
         MenuNode menu = currentMenu();
-        int index = menu.childIndexForSlot(hoveredSlot);
+        int index = menu.childIndexForSlot(pointerSlot);
         if (index < 0) {
-            index = menu.layoutOrDefault().mode == SlotLayout.Mode.DYNAMIC ? menu.firstFreeIndex() : hoveredSlot;
+            index = menu.layoutOrDefault().mode == SlotLayout.Mode.DYNAMIC ? menu.appendIndex() : pointerSlot;
         }
         GuiStack.push(new GuiSlotEditor(menu, index));
+    }
+
+    /**
+     * Turning the wheel moves the selection, when the player asked for that instead of pointing.
+     *
+     * <p>
+     * Wrapping at both ends, because a ring has no first or last entry - stopping at one would be an edge the wheel
+     * itself does not have.
+     */
+    @Override
+    public void handleMouseInput() {
+        super.handleMouseInput();
+        if (!RadialMenuConfig.scrollToSelect) {
+            return;
+        }
+        int wheel = Mouse.getEventDWheel();
+        if (wheel == 0) {
+            return;
+        }
+        int slotCount = sectorCount(currentMenu(), isEditModifierDown());
+        if (slotCount <= 0) {
+            return;
+        }
+        int step = wheel > 0 ? -1 : 1;
+        hoveredSlot = ((hoveredSlot < 0 ? 0 : hoveredSlot) + step + slotCount) % slotCount;
     }
 
     @Override
@@ -214,7 +278,9 @@ public class GuiRadialWheel extends GuiScreen {
         if (selected.isCategory()) {
             path.push(selected);
             sticky = true;
-            hoveredSlot = RadialGeometry.NO_SLOT;
+            // A submenu opens with nothing chosen, unless the cursor is not what chooses - then it opens on the
+            // first entry, because there would otherwise be no way to choose anything at all.
+            hoveredSlot = RadialMenuConfig.scrollToSelect ? 0 : RadialGeometry.NO_SLOT;
             return;
         }
 
