@@ -51,10 +51,24 @@ public final class ActionExecutors {
      * Runs an action immediately.
      *
      * <p>
-     * Only for callers that are already on the client tick with the wheel closed - chains and delayed command lines.
-     * Everything triggered from the wheel itself goes through {@link #enqueue} instead.
+     * Only for callers already on the client tick - chains and delayed command lines. Everything triggered from the
+     * wheel itself goes through {@link #enqueue} instead.
+     *
+     * <p>
+     * An entry marked {@code keepOpen} leaves the wheel up, and so do the later steps of a chain it started, so the
+     * one funnel every action passes through is where the wheel is hidden for the duration of the call. See
+     * {@link WithoutScreen} for what that is worth and why it is conditional.
      */
     public static void runNow(ActionSpec spec) {
+        if (WithoutScreen.wheelIsUp()) {
+            WithoutScreen.runAction(spec);
+            return;
+        }
+        execute(spec);
+    }
+
+    /** The execution itself, with no regard for what is on screen. Only {@link WithoutScreen} calls this directly. */
+    static void execute(ActionSpec spec) {
         IActionExecutor executor = get(spec.type);
         if (executor == null) {
             RadialMenuMod.LOG.warn("No executor registered for action type '" + spec.type + "'");
