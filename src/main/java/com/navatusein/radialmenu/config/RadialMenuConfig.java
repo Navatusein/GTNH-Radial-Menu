@@ -5,14 +5,19 @@ import static com.navatusein.radialmenu.RadialMenuMod.MODID;
 import com.gtnewhorizon.gtnhlib.config.Config;
 
 /**
- * Scalar settings - look and feel, not menu contents.
+ * How the wheel behaves: what opens it, what chooses an entry, and what the game is allowed to do meanwhile.
  *
  * <p>
- * These live in the normal {@code config} folder so they can be edited from the mod list screen like everyone else's.
- * The menus themselves are separate files under the game folder, because they are structured data a player will want
- * to copy between installations.
+ * One of four categories, and the split is by what a setting is about rather than by what it touches. A single list
+ * of thirty settings is a list nobody reads to the end, and these four are asked at different moments: how it works,
+ * what shape it is, what colour it is, and how an accent is turned into those colours.
+ *
+ * <p>
+ * All four write to the same file. They live in the normal {@code config} folder so they can be edited from the mod
+ * list screen like everyone else's; the menus themselves are separate files under the game folder, because they are
+ * structured data a player will want to copy between installations.
  */
-@Config(modid = MODID, configSubDirectory = "RadialMenu", filename = "general")
+@Config(modid = MODID, configSubDirectory = "RadialMenu", filename = "general", category = "general")
 @Config.LangKey("radialmenu.config.general")
 public class RadialMenuConfig {
 
@@ -21,69 +26,31 @@ public class RadialMenuConfig {
     @Config.Order(1)
     public static boolean releaseToSelect;
 
-    @Config.Comment("Open the slot editor by right-clicking a slot, instead of shift-clicking it.")
+    @Config.Comment("Choose the entry with the mouse wheel instead of by pointing at it. The cursor stops mattering, "
+        + "which suits a wheel opened with a mouse button.")
     @Config.DefaultBoolean(false)
     @Config.Order(2)
+    public static boolean scrollToSelect;
+
+    @Config.Comment("Open the slot editor by right-clicking a slot, instead of shift-clicking it.")
+    @Config.DefaultBoolean(false)
+    @Config.Order(3)
     public static boolean rightClickToEdit;
 
     @Config.Comment("Keep feeding keyboard and mouse input to the game while the wheel is open, so you can keep moving.")
     @Config.DefaultBoolean(true)
-    @Config.Order(3)
+    @Config.Order(4)
     public static boolean allowInputWhileOpen;
 
     @Config.Comment("Move the mouse cursor to the middle of the screen when the wheel opens.")
     @Config.DefaultBoolean(true)
-    @Config.Order(4)
-    public static boolean centerCursorOnOpen;
-
-    @Config.Comment("Outer radius of the ring, in GUI pixels.")
-    @Config.DefaultInt(80)
-    @Config.RangeInt(min = 32, max = 240)
     @Config.Order(5)
-    public static int outerRadius;
-
-    @Config.Comment("Inner radius of the ring. Also the dead zone: pointing inside it selects nothing.")
-    @Config.DefaultInt(32)
-    @Config.RangeInt(min = 8, max = 200)
-    @Config.Order(6)
-    public static int innerRadius;
-
-    @Config.Comment("Ring colour, 0xAARRGGBB.")
-    @Config.DefaultString("0x99101010")
-    @Config.Order(7)
-    public static String ringColor;
-
-    @Config.Comment("Colour of the highlighted sector, 0xAARRGGBB.")
-    @Config.DefaultString("0xCC4A90D9")
-    @Config.Order(8)
-    public static String highlightColor;
-
-    @Config.Comment("Default tint for sprite icons, #RRGGBB. Items and your own PNGs are not tinted.")
-    @Config.DefaultString("#FFFFFF")
-    @Config.Order(9)
-    public static String iconColor;
-
-    @Config.Comment("Colour of the lines on the wheel - sector dividers and ring edges, 0xAARRGGBB. "
-        + "Fully transparent hides them.")
-    @Config.DefaultString("0x60FFFFFF")
-    @Config.Order(10)
-    public static String borderColor;
+    public static boolean centerCursorOnOpen;
 
     @Config.Comment("While an action holds an unbound keybinding down, lend it a key code no keyboard can produce. "
         + "Some mods refuse to look at a binding whose key code is 0 - JourneyMap's zoom is one - so without this "
         + "they cannot be driven from the menu at all. Turn it off if a mod misbehaves around it.")
     @Config.DefaultBoolean(true)
-    @Config.Order(12)
+    @Config.Order(6)
     public static boolean lendKeyCodeToUnbound;
-
-    @Config.Comment("Thickness of those lines, in GUI pixels.")
-    @Config.DefaultInt(1)
-    @Config.RangeInt(min = 1, max = 6)
-    @Config.Order(11)
-    public static int borderWidth;
-
-    /** Guards against a hand-edited config where the hole is bigger than the ring. */
-    public static int effectiveInnerRadius() {
-        return Math.min(innerRadius, outerRadius - 8);
-    }
 }

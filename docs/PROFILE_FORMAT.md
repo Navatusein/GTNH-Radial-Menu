@@ -252,7 +252,9 @@ Rules that matter when generating one:
   "ringColor": "0x99101010",
   "highlightColor": "#4A90D9",
   "iconColor": "#FFFFFF",
-  "borderColor": "0x60FFFFFF"
+  "borderColor": "0x60FFFFFF",
+  "highlightBorderColor": "0xCCFFFFFF",
+  "backgroundColor": "0x80101010"
 }
 ```
 
@@ -262,9 +264,17 @@ Rules that matter when generating one:
 | `highlightColor` | The sector under the cursor. |
 | `iconColor` | Tint for `sprite` icons that have no colour of their own. Items and PNGs are unaffected. |
 | `borderColor` | The lines: sector dividers and the ring's inner and outer edges. |
+| `highlightBorderColor` | The outline around the sector under the cursor. |
+| `backgroundColor` | A wash over the screen behind the wheel. Only drawn when `dimBackground` is on in the mod config. |
 
 Omit a field, or the whole `style`, to inherit. **Colours inherit down a chain: menu → profile → mod config**, so a
 submenu that sets nothing looks like its profile, and a profile that sets nothing looks like the mod's settings.
+
+There is no accent in this file, and that is deliberate. The editor offers one as a way of filling these colours
+in from a single hue - how far each lands from it comes from the `accent*` settings in the mod's config - but what
+it writes is the colours themselves. A file always says outright what it is drawn with, and a colour written by an
+accent is afterwards an ordinary colour to adjust. `iconColor` is never among them: an icon that changes hue with
+the ring stops saying what it is.
 
 Two accepted forms, and the difference matters:
 

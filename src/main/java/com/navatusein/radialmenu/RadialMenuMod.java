@@ -20,7 +20,10 @@ import cpw.mods.fml.common.event.FMLPreInitializationEvent;
     name = RadialMenuMod.MODNAME,
     version = Tags.VERSION,
     acceptedMinecraftVersions = "[1.7.10]",
-    acceptableRemoteVersions = "*")
+    acceptableRemoteVersions = "*",
+    // Without this the Config button on the Mods screen opens an empty screen: @Config describes the file, and this
+    // is what gives Forge something to draw from it.
+    guiFactory = "com.navatusein.radialmenu.client.gui.ConfigGuiFactory")
 public class RadialMenuMod {
 
     public static final String MODID = "radialmenu";

@@ -62,6 +62,24 @@ public class ColorsTest {
     }
 
     @Test
+    public void brightnessDarkensByMultiplyingAndLightensTowardsWhite() {
+        // Multiplying would be the obvious rule both ways, and it fails upwards: a channel already at 255 cannot
+        // get any brighter, so a light accent would refuse to produce a lighter outline.
+        assertEquals(0x8040C0, Colors.scale(0x8040C0, 100));
+        assertEquals(0x402060, Colors.scale(0x8040C0, 50));
+        assertEquals(0x000000, Colors.scale(0x8040C0, 0));
+        assertEquals(0xC0A0E0, Colors.scale(0x8040C0, 150));
+        assertEquals("pure white at the top of the range", 0xFFFFFF, Colors.scale(0x8040C0, 200));
+        assertEquals("a white already at the ceiling still lightens to itself", 0xFFFFFF, Colors.scale(0xFFFFFF, 150));
+    }
+
+    @Test
+    public void brightnessKeepsNoAlphaOfItsOwn() {
+        assertEquals("an alpha channel on the way in is not carried out", 0x8040C0, Colors.scale(0xFF8040C0, 100));
+        assertEquals(0x99402060, Colors.withAlpha(Colors.scale(0x8040C0, 50), 0x99));
+    }
+
+    @Test
     public void aBrokenInheritedValueFallsBack() {
         assertEquals(0xCC4A90D9, Colors.resolve(null, "nonsense", 0xCC4A90D9));
         // The override still applies over the fallback's opacity.

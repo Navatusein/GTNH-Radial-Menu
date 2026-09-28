@@ -56,6 +56,13 @@ MineMenu's equivalent is a closed `enum` with a bespoke screen per type. Don't r
 empty slot, which only happens under `SlotLayout.Mode.FIXED`. `normalize()` repairs hand-edited files rather than
 throwing — a broken profile must never stop the client from starting.
 
+**A sector is not a list position.** Under `DYNAMIC` the gaps stay in the list and simply are not drawn, so the two
+numbers diverge the moment a menu is switched over from `FIXED`. `childAt`/`childIndexForSlot` take a sector,
+`childAtIndex`/`setChildAt` take a list position, and `slotForChildIndex` converts back for anything the player
+reads. `GuiSlotEditor` was handed a position and looked it up as a sector — translating twice — so shift-clicking
+the empty sector a dynamic wheel grows for adding opened an existing entry six places round the ring, titled with
+its own number, and saving would have overwritten it.
+
 ## The keybind injection mechanism
 
 This is the crux, and it is verified against the decompiled 1.7.10 source, not assumed:
@@ -211,6 +218,15 @@ newer radial-menu mods use does not transfer. `tools/GenerateIconAtlas.java` ren
 
 Draw sprites with explicit texture coordinates; `Gui.drawTexturedModalRect` assumes a 256×256 sheet.
 
+**The registry is not the item list.** A picker that walks `Item.itemRegistry` shows one entry per registry name,
+which is white stained clay and none of the other fifteen — the difference lives in the damage value, and only the
+item knows which of the 32768 possible values mean anything. `GuiIconPicker` asks each item for its subtypes through
+`getSubItems`, once per creative tab it claims (an item spanning several returns a different slice for each), and
+dedupes on the damage value. Each subtype's display name is resolved at load and folded into the search text,
+because a player hunting for lime clay is reading tooltips, not `minecraft:stained_hardened_clay`. Both calls are
+guarded: a mod's `getSubItems` can reach for world or config state a GUI has not got, and an item that throws still
+keeps its meta 0 rather than vanishing.
+
 **An item's own renderer can throw, and it is not ours to fix.** Binnie's gene items ask their breeding system for a
 colour and NPE when there is none, which there is not on the bare meta-0 stack the picker builds — it killed the
 client mid-scroll, and would do the same in the world if such an item were an entry's icon. `IconRenderer` catches
@@ -222,6 +238,38 @@ The ring is drawn as full-width sectors with a line on each boundary and an edge
 sectors a couple of degrees narrow instead, leaving wedges of bare world between them — which also made the wheel lie
 about itself, since the angle a click resolves to never knew about the gaps and aiming at one still picked a
 neighbour. The edges are drawn inwards from their radius so turning the lines on cannot change the wheel's size.
+
+**`sectorGap` is a distance, and only a look.** `RadialGeometry.gapInsetDegrees` insets each radius by
+`asin(halfGap / radius)`, so the two sectors stay the same distance apart from hole to rim and the edge between them
+is a straight line — inset by a fixed *angle* instead and the gap fans out, which is what the old narrow sectors
+looked like. Hit testing still runs on the full, undivided sector, so aiming into a gap picks the sector it belongs
+to. With a gap the divider stops being a line down the middle of the boundary and becomes an edge along each
+sector's own sides; a line floating in a gap is a third thing between two sectors.
+
+**The soft edge is drawn, not asked for.** `GL_POLYGON_SMOOTH` is wrong here twice: it wants
+`GL_SRC_ALPHA_SATURATE` blending and sorted geometry, while a sector is a strip of quads that share edges — every
+shared edge would come out at partial coverage and the ring would be drawn with seams across it — and several
+drivers ignore it or route it through software, so the wheel would look different on every third machine. A one
+pixel band with its alpha ramped to nothing costs a few polygons and looks the same everywhere. Only one such band
+per silhouette edge: where the ring's own lines are drawn they are what fades, otherwise the fill is, because two
+fades over the same pixels read as a thicker, dirtier outline rather than a softer one. Those bands set a colour on
+**every** vertex — the tessellator writes its last colour into each vertex, so one added before any colour comes out
+transparent black.
+
+**Where a setting lives follows what it is about.** The mod config holds how the wheel behaves and how it moves —
+that is about the person at the keyboard, and a profile copied from someone else has no business changing it. The
+profile and menu chain holds how it looks, because that is what travels with the file. `MenuStyle` is the colour half
+of that chain and `StyleResolver` is the only place it is walked: config, then profile, then menu, each level naming
+only what it changes.
+
+**An accent is a tool, not a level of the chain.** It was one at first — stored on the style, expanded at draw time,
+with explicit colours laid over it — and every question it raised had two defensible answers: does picking one
+recolour what you already chose, does a submenu's accent beat its profile's explicit ring. Picking an accent now
+writes `WheelColors.fromAccent` straight into the colour fields and keeps nothing, so a file always says outright
+what it is drawn with and the resolver has one rule instead of two. The `accent*` coefficients stay in the config:
+they are the mod's look, not the player's choice of hue, and they are the one place the six-digit/eight-digit alpha
+hazard cannot bite. `ActionField.Kind.ACCENT` carries the keys it fills in, which is how the generated editors offer
+it without knowing what a wheel is.
 
 **Colours inherit: menu → profile → mod config.** `core/Colors` owns the parsing, because it was duplicated in the
 renderer and in `IconSpec` and had drifted. The colour picker writes `#RRGGBB` while the config writes
@@ -235,6 +283,18 @@ Icon tints distinguish two kinds of blank: **null keeps the artwork's own colour
 `MenuStyle.of` takes every colour explicitly and has no shorter overload. It briefly had two that differed only in
 which optional colour the third argument meant — the types matched either way round, so the compiler would have said
 nothing while the colours quietly swapped.
+
+**The plate behind an icon is vanilla's own art.** `slotPlate` cuts the inventory's slot cell out of
+`textures/gui/container/inventory.png` at (7, 141) and the hotbar's selection frame out of `textures/gui/widgets.png`
+at (0, 22) — the coordinates come from `ContainerPlayer`'s hotbar slots at `8 + i * 18, 142` and `GuiIngame`'s own
+draw call. Newer radial menus use `minecraft:gamemode_switcher/slot`, which is 1.14 art: it does not exist here, and
+shipping a copy of it would be redistributing Mojang's files. Cells for every entry first, the selection frame last,
+so the frame overlaps its neighbours instead of being clipped by whichever cell drew after it.
+
+**Pointing and choosing are separate once `scrollToSelect` is on.** `hoveredSlot` is what is selected — the cursor's
+sector, or whatever the wheel was turned to — while `pointerSlot` is always the cursor's. Editing reads the pointer:
+the dead zone in the middle is the only way into a menu's own settings, and a selection driven by the scroll wheel
+never sits in it.
 
 ## Profiles
 
