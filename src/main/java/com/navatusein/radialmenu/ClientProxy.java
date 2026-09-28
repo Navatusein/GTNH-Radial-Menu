@@ -19,6 +19,7 @@ import com.navatusein.radialmenu.client.input.WheelKeyBindings;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileStorage;
 import com.navatusein.radialmenu.config.AccentConfig;
+import com.navatusein.radialmenu.config.AnimationConfig;
 import com.navatusein.radialmenu.config.ColorConfig;
 import com.navatusein.radialmenu.config.RadialMenuConfig;
 import com.navatusein.radialmenu.config.WheelConfig;
@@ -41,6 +42,7 @@ public class ClientProxy extends CommonProxy {
             ConfigurationManager.registerConfig(WheelConfig.class);
             ConfigurationManager.registerConfig(ColorConfig.class);
             ConfigurationManager.registerConfig(AccentConfig.class);
+            ConfigurationManager.registerConfig(AnimationConfig.class);
         } catch (ConfigException e) {
             throw new RuntimeException("Failed to register the RadialMenu config", e);
         }

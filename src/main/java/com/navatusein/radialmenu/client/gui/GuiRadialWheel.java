@@ -45,6 +45,9 @@ public class GuiRadialWheel extends GuiScreen {
     private boolean sticky;
 
     /** What is selected: where the cursor points, or what the wheel was turned to. */
+    /** The clock behind the opening animation and the push under the cursor. */
+    private final WheelAnimator animator = new WheelAnimator();
+
     private int hoveredSlot = RadialGeometry.NO_SLOT;
 
     /**
@@ -64,6 +67,7 @@ public class GuiRadialWheel extends GuiScreen {
     @Override
     public void initGui() {
         super.initGui();
+        animator.reset();
         if (RadialMenuConfig.centerCursorOnOpen) {
             Mouse.setCursorPosition(this.mc.displayWidth / 2, this.mc.displayHeight / 2);
         }
@@ -119,7 +123,8 @@ public class GuiRadialWheel extends GuiScreen {
             drawRect(0, 0, this.width, this.height, colors.background);
         }
 
-        WheelRenderer.drawWheel(menu, colors, slotCount, centerX, centerY, hoveredSlot, editMode);
+        animator.advance(slotCount, hoveredSlot);
+        WheelRenderer.drawWheel(menu, colors, slotCount, centerX, centerY, hoveredSlot, editMode, animator);
         WheelRenderer.drawHeader(this.width, ProfileManager.activeName(), breadcrumb(), editMode);
         // Only while the cursor is actually in the dead zone: elsewhere the centre belongs to the hovered entry's
         // name, and the two were drawing on top of each other.
@@ -278,6 +283,9 @@ public class GuiRadialWheel extends GuiScreen {
         if (selected.isCategory()) {
             path.push(selected);
             sticky = true;
+            // A submenu is a new wheel arriving; one that appeared fully drawn while its neighbours animated would
+            // look like something went wrong rather than like a choice.
+            animator.reset();
             // A submenu opens with nothing chosen, unless the cursor is not what chooses - then it opens on the
             // first entry, because there would otherwise be no way to choose anything at all.
             hoveredSlot = RadialMenuConfig.scrollToSelect ? 0 : RadialGeometry.NO_SLOT;

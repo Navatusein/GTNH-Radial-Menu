@@ -16,9 +16,11 @@ import org.lwjgl.opengl.GL11;
 
 import com.navatusein.radialmenu.client.icon.IconRenderer;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
+import com.navatusein.radialmenu.config.AnimationConfig;
 import com.navatusein.radialmenu.config.ColorConfig;
 import com.navatusein.radialmenu.config.SlotPlate;
 import com.navatusein.radialmenu.config.WheelConfig;
+import com.navatusein.radialmenu.core.animation.RevealAnimation;
 import com.navatusein.radialmenu.core.geometry.RadialGeometry;
 import com.navatusein.radialmenu.core.model.MenuNode;
 import com.navatusein.radialmenu.core.model.StyleResolver;
@@ -73,30 +75,39 @@ public final class WheelRenderer {
     }
 
     public static void drawWheel(MenuNode menu, WheelColors colors, int slotCount, int centerX, int centerY,
-        int hoveredSlot, boolean editMode) {
+        int hoveredSlot, boolean editMode, WheelAnimator animator) {
         if (slotCount <= 0) {
             return;
         }
 
         int outer = WheelConfig.outerRadius;
         int inner = WheelConfig.effectiveInnerRadius();
+
+        // Only the growing kinds scale; a fade leaves the wheel where it is and brings it up in place.
+        boolean grows = AnimationConfig.revealAnimation != RevealAnimation.FADE;
         double gap = Math.max(0.0, WheelConfig.sectorGap);
         double width = Math.max(1, WheelConfig.borderWidth);
 
-        boolean lines = (colors.border >>> 24) != 0 && WheelConfig.drawOutline;
-        boolean edges = lines;
-        // A single boundary on a one-entry wheel is a line across an otherwise unbroken ring, dividing nothing.
-        boolean dividers = lines && slotCount >= 2;
+        boolean outline = (colors.border >>> 24) != 0 && WheelConfig.drawOutline;
         boolean smooth = WheelConfig.smoothEdges;
 
-        // With a gap the edges belong to the sectors, not to the wheel: a ring carried right across the gaps turns
-        // them into slots punched out of a solid disc, which is the opposite of what a gap is for.
-        boolean brokenEdges = edges && gap > 0.0;
+        // The outline belongs to each sector, never to the wheel. Drawn as two circles and a set of dividers it is
+        // the same picture while nothing moves - and the moment one sector grows or leans out towards the cursor,
+        // the ring stays behind and cuts across it. Sides half a width each when there is no gap, so two
+        // neighbours' lines meet as the single line that used to straddle the boundary.
+        double sideWidth = gap > 0.0 ? width : width / 2.0;
 
         beginShapes();
 
         double span = RadialGeometry.sectorSpan(slotCount);
         for (int slot = 0; slot < slotCount; slot++) {
+            float reveal = animator.reveal(slot, slotCount);
+            if (reveal <= 0.01f) {
+                continue;
+            }
+            double sectorInner = sectorRadius(inner, reveal, grows, animator.push(slot));
+            double sectorOuter = sectorRadius(outer, reveal, grows, animator.push(slot));
+
             boolean filled = menu.childAt(slot) != null;
             int color = slot == hoveredSlot ? colors.highlight : colors.ring;
             if (!filled) {
@@ -104,49 +115,81 @@ public final class WheelRenderer {
                 // memorised never move.
                 color = fade(color, 0.35F);
             }
+            color = fade(color, reveal);
+            int lineColor = fade(colors.border, reveal);
             double start = RadialGeometry.slotCenterAngle(slot, slotCount, 0.0) - span / 2.0;
 
-            fillSector(centerX, centerY, inner, outer, start, span, gap, color);
+            fillSector(centerX, centerY, sectorInner, sectorOuter, start, span, gap, color);
 
-            if (brokenEdges) {
-                edgeArcs(centerX, centerY, inner, outer, start, span, gap, width, colors.border);
+            if (outline) {
+                outlineSector(
+                    centerX,
+                    centerY,
+                    sectorInner,
+                    sectorOuter,
+                    start,
+                    span,
+                    gap,
+                    width,
+                    sideWidth,
+                    lineColor);
             }
 
             if (smooth) {
-                // Whatever sits on an edge is what fades out of it: the ring's own lines where they are drawn, the
-                // fill where they are not. Feathering both would lay two fades over the same pixels, which reads as
-                // a thicker, dirtier outline rather than a softer one.
-                if (!edges || brokenEdges) {
-                    featherArcs(centerX, centerY, inner, outer, start, span, gap, brokenEdges ? colors.border : color);
-                }
+                // Whatever sits on an edge is what fades out of it: the outline where it is drawn, the fill where
+                // it is not. Feathering both would lay two fades over the same pixels, which reads as a thicker,
+                // dirtier outline rather than a softer one.
+                featherArcs(centerX, centerY, sectorInner, sectorOuter, start, span, gap, outline ? lineColor : color);
+                // Only across a gap: with none, a sector's sides touch its neighbours' and the two fades would
+                // darken every boundary from the inside.
                 if (gap > 0.0) {
-                    featherSides(centerX, centerY, inner, outer, start, span, gap, dividers ? colors.border : color);
+                    featherSides(
+                        centerX,
+                        centerY,
+                        sectorInner,
+                        sectorOuter,
+                        start,
+                        span,
+                        gap,
+                        outline ? lineColor : color);
                 }
             }
         }
 
-        if (edges && !brokenEdges) {
-            drawRingEdges(centerX, centerY, inner, outer, width, colors.border);
-            if (smooth) {
-                featherCircle(centerX, centerY, outer, true, colors.border);
-                featherCircle(centerX, centerY, inner, false, colors.border);
-            }
-        }
-        if (dividers) {
-            drawDividers(centerX, centerY, inner, outer, slotCount, span, gap, width, colors.border);
-        }
         if (WheelConfig.drawHighlightOutline && (colors.highlightBorder >>> 24) != 0
             && hoveredSlot >= 0
             && hoveredSlot < slotCount) {
+            float reveal = animator.reveal(hoveredSlot, slotCount);
             double start = RadialGeometry.slotCenterAngle(hoveredSlot, slotCount, 0.0) - span / 2.0;
-            outlineSector(centerX, centerY, inner, outer, start, span, gap, width, colors.highlightBorder);
+            outlineSector(
+                centerX,
+                centerY,
+                sectorRadius(inner, reveal, grows, animator.push(hoveredSlot)),
+                sectorRadius(outer, reveal, grows, animator.push(hoveredSlot)),
+                start,
+                span,
+                gap,
+                width,
+                width,
+                fade(colors.highlightBorder, reveal));
         }
 
         endShapes();
 
-        drawPlates(menu, centerX, centerY, slotCount, inner, outer, hoveredSlot);
-        drawIcons(menu, centerX, centerY, slotCount, inner, outer);
+        drawPlates(menu, centerX, centerY, slotCount, inner, outer, hoveredSlot, grows, animator);
+        drawIcons(menu, centerX, centerY, slotCount, inner, outer, grows, animator);
         drawLabel(menu, centerX, centerY, hoveredSlot);
+    }
+
+    /**
+     * Where a radius sits this frame: scaled by how far the sector has arrived, then pushed out by the hover.
+     *
+     * <p>
+     * The push is added rather than scaled in, so a sector leans out of the ring by the same few pixels whether the
+     * wheel is large or small - it is a nudge towards the cursor, not a size.
+     */
+    private static double sectorRadius(double radius, float reveal, boolean grows, double push) {
+        return (grows ? radius * reveal : radius) + push;
     }
 
     /**
@@ -263,15 +306,6 @@ public final class WheelRenderer {
             argb);
     }
 
-    /** The same fade around a whole circle, for when the ring's own edge lines are what the player sees. */
-    private static void featherCircle(int centerX, int centerY, double radius, boolean outward, int argb) {
-        if (outward) {
-            arcBand(centerX, centerY, radius, radius + FEATHER, 0.0, 360.0, argb, transparent(argb));
-        } else {
-            arcBand(centerX, centerY, radius - FEATHER, radius, 0.0, 360.0, transparent(argb), argb);
-        }
-    }
-
     /** The fade along a sector's straight sides, which only exist once there is a gap to see them against. */
     private static void featherSides(int centerX, int centerY, double inner, double outer, double startAngle,
         double spanDegrees, double gap, int argb) {
@@ -279,62 +313,15 @@ public final class WheelRenderer {
         sideBand(centerX, centerY, inner, outer, startAngle, spanDegrees, gap, FEATHER, false, argb);
     }
 
-    /** The lines along the inner and outer edges, drawn inwards so turning them on cannot change the wheel's size. */
-    private static void drawRingEdges(int centerX, int centerY, double inner, double outer, double width, int argb) {
-        arcBand(centerX, centerY, outer - width, outer, 0.0, 360.0, argb, argb);
-        arcBand(centerX, centerY, inner, inner + width, 0.0, 360.0, argb, argb);
-    }
-
-    /** The same two lines, but only along one sector - which is what a wheel with gaps in it is made of. */
-    private static void edgeArcs(int centerX, int centerY, double inner, double outer, double startAngle,
-        double spanDegrees, double gap, double width, int argb) {
-        double insetInner = inset(inner, gap, spanDegrees);
-        double insetOuter = inset(outer, gap, spanDegrees);
-
-        arcBand(
-            centerX,
-            centerY,
-            outer - width,
-            outer,
-            startAngle + insetOuter,
-            startAngle + spanDegrees - insetOuter,
-            argb,
-            argb);
-        arcBand(
-            centerX,
-            centerY,
-            inner,
-            inner + width,
-            startAngle + insetInner,
-            startAngle + spanDegrees - insetInner,
-            argb,
-            argb);
-    }
-
     /**
-     * What separates one sector from the next.
+     * The outline of one sector: an arc at each radius and a line down each side.
      *
-     * <p>
-     * With no gap that is a line straddling the boundary, as it has always been. With a gap the boundary is already
-     * visible, and a line down the middle of it would be a third thing between two sectors; each sector is edged
-     * along its own sides instead, which is what makes a gap read as a gap rather than as a mistake.
+     * @param width     thickness of the two arcs
+     * @param sideWidth thickness of the sides, which is half as much when there is no gap and a neighbour is
+     *                  drawing its own line against this one
      */
-    private static void drawDividers(int centerX, int centerY, double inner, double outer, int slotCount,
-        double spanDegrees, double gap, double width, int argb) {
-        if (gap <= 0.0) {
-            straddlingDividers(centerX, centerY, inner, outer, slotCount, spanDegrees, width / 2.0, argb);
-            return;
-        }
-        for (int slot = 0; slot < slotCount; slot++) {
-            double start = RadialGeometry.slotCenterAngle(slot, slotCount, 0.0) - spanDegrees / 2.0;
-            sideBand(centerX, centerY, inner, outer, start, spanDegrees, gap, -width, true, argb);
-            sideBand(centerX, centerY, inner, outer, start, spanDegrees, gap, -width, false, argb);
-        }
-    }
-
-    /** The outline of one sector, for saying which one the cursor is on without relying on its fill alone. */
     private static void outlineSector(int centerX, int centerY, double inner, double outer, double startAngle,
-        double spanDegrees, double gap, double width, int argb) {
+        double spanDegrees, double gap, double width, double sideWidth, int argb) {
         double insetInner = inset(inner, gap, spanDegrees);
         double insetOuter = inset(outer, gap, spanDegrees);
 
@@ -356,8 +343,8 @@ public final class WheelRenderer {
             startAngle + spanDegrees - insetInner,
             argb,
             argb);
-        sideBand(centerX, centerY, inner, outer, startAngle, spanDegrees, gap, -width, true, argb);
-        sideBand(centerX, centerY, inner, outer, startAngle, spanDegrees, gap, -width, false, argb);
+        sideBand(centerX, centerY, inner, outer, startAngle, spanDegrees, gap, -sideWidth, true, argb);
+        sideBand(centerX, centerY, inner, outer, startAngle, spanDegrees, gap, -sideWidth, false, argb);
     }
 
     /**
@@ -443,32 +430,6 @@ public final class WheelRenderer {
         tessellator.draw();
     }
 
-    /** The original divider: a line laid across a boundary, half of it in each neighbour. */
-    private static void straddlingDividers(int centerX, int centerY, double inner, double outer, int slotCount,
-        double spanDegrees, double half, int argb) {
-        glColor(argb);
-
-        Tessellator tessellator = Tessellator.instance;
-        tessellator.startDrawingQuads();
-
-        for (int slot = 0; slot < slotCount; slot++) {
-            double angle = Math.toRadians(RadialGeometry.slotCenterAngle(slot, slotCount, 0.0) - spanDegrees / 2.0);
-            double sin = Math.sin(angle);
-            double cos = Math.cos(angle);
-
-            // Across the boundary rather than around it, so the line keeps one thickness at either radius instead
-            // of fanning out the way an angular gap does.
-            double acrossX = cos * half;
-            double acrossY = sin * half;
-
-            tessellator.addVertex(centerX + sin * inner - acrossX, centerY - cos * inner - acrossY, 0.0);
-            tessellator.addVertex(centerX + sin * outer - acrossX, centerY - cos * outer - acrossY, 0.0);
-            tessellator.addVertex(centerX + sin * outer + acrossX, centerY - cos * outer + acrossY, 0.0);
-            tessellator.addVertex(centerX + sin * inner + acrossX, centerY - cos * inner + acrossY, 0.0);
-        }
-        tessellator.draw();
-    }
-
     private static void addVertex(Tessellator tessellator, int centerX, int centerY, double angle, double radius) {
         tessellator.addVertex(
             centerX + RadialGeometry.offsetX(angle, radius),
@@ -522,17 +483,17 @@ public final class WheelRenderer {
      * by whichever cell happens to be drawn after it.
      */
     private static void drawPlates(MenuNode menu, int centerX, int centerY, int slotCount, int inner, int outer,
-        int hoveredSlot) {
+        int hoveredSlot, boolean grows, WheelAnimator animator) {
         SlotPlate plate = WheelConfig.slotPlate;
         if (plate == null || plate == SlotPlate.NONE) {
             return;
         }
 
-        double iconRadius = (inner + outer) / 2.0;
         for (int slot = 0; slot < slotCount; slot++) {
-            if (menu.childAt(slot) == null) {
+            if (menu.childAt(slot) == null || !arrived(animator, slot, slotCount)) {
                 continue;
             }
+            double iconRadius = iconRadius(inner, outer, slot, slotCount, grows, animator);
             int x = iconLeft(centerX, slot, slotCount, iconRadius);
             int y = iconTop(centerY, slot, slotCount, iconRadius);
             drawTexture(INVENTORY, x - 1, y - 1, 7, 141, 18, 18);
@@ -540,9 +501,10 @@ public final class WheelRenderer {
 
         if (plate == SlotPlate.SELECTED) {
             for (int slot = 0; slot < slotCount; slot++) {
-                if (menu.childAt(slot) == null) {
+                if (menu.childAt(slot) == null || !arrived(animator, slot, slotCount)) {
                     continue;
                 }
+                double iconRadius = iconRadius(inner, outer, slot, slotCount, grows, animator);
                 drawSelection(
                     iconLeft(centerX, slot, slotCount, iconRadius),
                     iconTop(centerY, slot, slotCount, iconRadius));
@@ -550,11 +512,14 @@ public final class WheelRenderer {
             return;
         }
 
-        if (plate != SlotPlate.HOTBAR || hoveredSlot < 0 || menu.childAt(hoveredSlot) == null) {
+        if (plate != SlotPlate.HOTBAR || hoveredSlot < 0
+            || menu.childAt(hoveredSlot) == null
+            || !arrived(animator, hoveredSlot, slotCount)) {
             return;
         }
-        int x = iconLeft(centerX, hoveredSlot, slotCount, iconRadius);
-        int y = iconTop(centerY, hoveredSlot, slotCount, iconRadius);
+        double hoveredRadius = iconRadius(inner, outer, hoveredSlot, slotCount, grows, animator);
+        int x = iconLeft(centerX, hoveredSlot, slotCount, hoveredRadius);
+        int y = iconTop(centerY, hoveredSlot, slotCount, hoveredRadius);
         drawSelection(x, y);
     }
 
@@ -609,13 +574,37 @@ public final class WheelRenderer {
         return (int) Math.round(centerY + RadialGeometry.offsetY(angle, iconRadius)) - IconRenderer.ICON_SIZE / 2;
     }
 
-    private static void drawIcons(MenuNode menu, int centerX, int centerY, int slotCount, int inner, int outer) {
-        double iconRadius = (inner + outer) / 2.0;
+    /**
+     * Where a sector's icon sits, following its sector out and back.
+     *
+     * <p>
+     * Midway between the two radii, which is where it has always been - it only moves now because the radii do.
+     */
+    private static double iconRadius(int inner, int outer, int slot, int slotCount, boolean grows,
+        WheelAnimator animator) {
+        float reveal = animator.reveal(slot, slotCount);
+        return (grows ? (inner + outer) / 2.0 * reveal : (inner + outer) / 2.0) + animator.push(slot);
+    }
+
+    /**
+     * Whether a sector is far enough along to carry its icon.
+     *
+     * <p>
+     * An icon cannot be faded - an item is drawn by vanilla's own renderer, which sets its own colour - so it waits
+     * instead. Drawn from the first frame they would all be piled in the middle of the wheel while it grows.
+     */
+    private static boolean arrived(WheelAnimator animator, int slot, int slotCount) {
+        return animator.reveal(slot, slotCount) > 0.5f;
+    }
+
+    private static void drawIcons(MenuNode menu, int centerX, int centerY, int slotCount, int inner, int outer,
+        boolean grows, WheelAnimator animator) {
         for (int slot = 0; slot < slotCount; slot++) {
             MenuNode child = menu.childAt(slot);
-            if (child == null || child.icon == null) {
+            if (child == null || child.icon == null || !arrived(animator, slot, slotCount)) {
                 continue;
             }
+            double iconRadius = iconRadius(inner, outer, slot, slotCount, grows, animator);
             IconRenderer.draw(
                 child.icon,
                 iconLeft(centerX, slot, slotCount, iconRadius),
