@@ -113,12 +113,17 @@ own keeps it. Nothing renders during a tick, so no frame sees the substitution, 
 avoids `displayGuiScreen`'s `unPressAllKeys`, its `initGui`, and the cursor re-centring that would move the player's
 aim off the sector.
 
-**Cover both moments a mod can read a key.** NEI reads its own bindings from a `ClientTickEvent` handler at phase
-**END**, so hiding the screen only for the length of the injection call — which happens at phase START — restores it
-before NEI ever looks. `WithoutScreen` therefore has a second window: armed for the one tick a press was made, a
-HIGHEST-priority END listener hides the screen and a LOWEST-priority one puts it back, so every other mod's END
-handler runs in between with a clear screen. `isPressed()` is a one-shot counter, so that tick is the only chance a
-tick-phase reader gets.
+**Cover both moments a mod can read a key.** Besides the `KeyInputEvent` posted during the injection, a mod may read
+from its own `ClientTickEvent` handler — NEI does, at phase **START** (`if (event.phase == Phase.END) return;`).
+`WithoutScreen` therefore wraps the tick as well: a `HIGH` listener hides the screen, a `LOW` one puts it back, and
+the mod's own listener sits at `LOWEST` so it acts on the real screen. The arming is for the **next** tick, because
+NEI's handler runs before ours in the same phase, and it is only cleared after a START phase — clearing it at the END
+phase of the same tick would spend it before the reader that matters ever looked.
+
+**Read the phase out of the mod's source, never out of a description of it.** A bug report said NEI read at END, and
+three fixes in a row carefully wrapped the phase in which NEI does nothing at all. Every measurement was correct and
+said `press 1->1`; the wrong assumption was upstream of all of them. Checking `ClientHandler.tickEvent` would have
+taken one minute against six client runs.
 
 **Check the version you are reading against the pack's.** `dependencies.gradle` pins NEI 2.8.91-GTNH, where the
 overlay keys really were polled with `Keyboard.isKeyDown` and no Forge keybinding existed. GTNH Daily 758 ships

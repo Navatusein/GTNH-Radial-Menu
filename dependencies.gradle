@@ -38,7 +38,15 @@ dependencies {
     // the annotation-driven config system, and the gtnhmixins registration helpers.
     implementation("com.github.GTNewHorizons:GTNHLib:0.11.48:dev") { transitive = false }
 
-    runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.8.91-GTNH:dev")
+    // Pinned to what GTNH Daily 758 ships, not to "latest": 2.8.91 read its overlay keys straight from the
+    // keyboard and registered no Forge keybinding, so a dev client on that version cannot reproduce - or disprove -
+    // anything about them. Reading the wrong jar is how one bug report got diagnosed backwards.
+    runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.8.147-GTNH:dev")
+
+    // Not on any maven we can reach, so it is copied out of the pack into libs/ (gitignored - it is somebody
+    // else's jar). Deobfuscated on the way in, because a production jar is SRG-named and the dev client is not.
+    // Here to reproduce the zoom keys, which JourneyMap refuses to read while their key code is 0.
+    runtimeOnlyNonPublishable(rfg.deobf(files("libs/journeymap-1.7.10-5.2.33-unlimited.jar")))
 
     testImplementation("junit:junit:4.13.2")
 }
