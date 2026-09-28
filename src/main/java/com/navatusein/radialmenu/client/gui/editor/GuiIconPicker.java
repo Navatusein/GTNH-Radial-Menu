@@ -1,6 +1,8 @@
 package com.navatusein.radialmenu.client.gui.editor;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 
 import net.minecraft.client.gui.GuiButton;
@@ -47,6 +49,8 @@ public class GuiIconPicker extends UiScreen {
     private static final int ID_ORIGINAL = 22;
 
     private static final int CELL = 20;
+
+    private static final String VANILLA = "minecraft";
 
     /** Enough for the swatch and a six-digit hex beside it. */
     private static final int COLOR_WIDTH = 66;
@@ -113,9 +117,7 @@ public class GuiIconPicker extends UiScreen {
     @Override
     protected void buildControls() {
         if (itemNames.isEmpty()) {
-            for (Object key : Item.itemRegistry.getKeys()) {
-                itemNames.add(String.valueOf(key));
-            }
+            loadItemNames();
         }
 
         int left = contentLeft();
@@ -196,6 +198,56 @@ public class GuiIconPicker extends UiScreen {
 
     private int gridBottom() {
         return viewportBottom();
+    }
+
+    /**
+     * Every registered item, grouped by the mod that added it.
+     *
+     * <p>
+     * The registry hands its keys out of a {@code HashMap}, so untouched they arrive in hash order - not even
+     * registration order - and a pack with three hundred mods looks like the contents of a dropped toolbox.
+     *
+     * <p>
+     * Vanilla first, then mods by id. Inside a mod the numeric registry id is used, which is the order that mod
+     * registered its items in: tiers, tools and material families come out adjacent, the way their author grouped
+     * them. Sorting the names alphabetically instead would split those families wherever the naming is not perfectly
+     * consistent, which in practice is everywhere.
+     */
+    private void loadItemNames() {
+        List<String> names = new ArrayList<>();
+        for (Object key : Item.itemRegistry.getKeys()) {
+            names.add(String.valueOf(key));
+        }
+
+        Collections.sort(names, new Comparator<String>() {
+
+            @Override
+            public int compare(String left, String right) {
+                int byMod = compareMods(domainOf(left), domainOf(right));
+                return byMod != 0 ? byMod : registryId(left) - registryId(right);
+            }
+        });
+        itemNames.addAll(names);
+    }
+
+    private static String domainOf(String name) {
+        int colon = name.indexOf(':');
+        return colon < 0 ? "" : name.substring(0, colon);
+    }
+
+    /** Vanilla leads, because it is what a player reaches for first and what they can name from memory. */
+    private static int compareMods(String left, String right) {
+        boolean leftVanilla = VANILLA.equals(left);
+        boolean rightVanilla = VANILLA.equals(right);
+        if (leftVanilla != rightVanilla) {
+            return leftVanilla ? -1 : 1;
+        }
+        return left.compareToIgnoreCase(right);
+    }
+
+    private static int registryId(String name) {
+        Item item = (Item) Item.itemRegistry.getObject(name);
+        return item == null ? Integer.MAX_VALUE : Item.getIdFromItem(item);
     }
 
     private int rowsVisible() {
