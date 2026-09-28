@@ -37,6 +37,10 @@ by hand, so it works on unmodified servers and other players need nothing.
 Next profile, previous profile and the profile editor have keybindings of their own, unbound by default. The open
 key can be a mouse button.
 
+#### Interface
+
+![Wheel](/docs/assets/wheel.png)
+
 #### What a slot can do
 
 | Action | What it does |
@@ -52,6 +56,16 @@ key can be a mouse button.
 Any item or block from the registry, subtypes included; a sprite from the bundled
 [Phosphor](https://phosphoricons.com/) set; a status effect, vanilla or modded; or your own PNG dropped into
 `RadialMenu/icons`.
+
+| Items | Sprites |
+|---|---|
+| ![Items](/docs/assets/icon-picker-items.png) | ![Sprites](/docs/assets/icon-picker-sprites.png) |
+
+| Effects | Your own PNGs |
+|---|---|
+| ![Effects](/docs/assets/icon-picker-effects.png) | ![PNGs](/docs/assets/icon-picker-files.png) |
+
+Items are grouped by the mod that added them and searched by the name you see in game, not by the registry id.
 
 <a id="installation"></a>
 
@@ -69,18 +83,33 @@ not need to know about it.
 
 ## Usage
 
-Hold the open key. The wheel appears under the cursor, the sector you point at is highlighted, and releasing the key
-runs it. An entry can be marked **Keep menu open**, which leaves the wheel up so it can be triggered again.
+Hold the open key. The wheel appears under the cursor, the sector you point at is highlighted and named in the
+middle, and releasing the key runs it. An entry can be marked **Keep menu open**, which leaves the wheel up so it
+can be triggered again.
 
-To fill the wheel in, hold the key and <kbd>Shift</kbd> + <kbd>Left click</kbd> a sector — an empty one creates an
-entry, a filled one edits it. Shift-clicking the hole in the middle opens the settings of the menu itself: its name,
-its layout, the order of its entries and its colours.
+![Hovered entry](/docs/assets/wheel-hover.png)
+
+#### Editing
+
+Hold <kbd>Shift</kbd> and the wheel says **EDIT**. Clicking a sector opens it — an empty one creates an entry, a
+filled one edits it — and clicking the hole in the middle opens the settings of the menu you are in.
+
+![Edit mode](/docs/assets/wheel-edit.png)
+
+A slot is its appearance and its action: a title, an icon, and one of the five things a slot can do. The fields
+below the tabs are whatever that action needs, so the screen has nothing on it that does not apply.
+
+![Slot editor](/docs/assets/slot-editor.png)
 
 #### Layout
 
 A menu is either **fixed** or **dynamic**. Fixed keeps every entry at the same angle whatever its neighbours do,
 which is what makes muscle memory work; empty positions stay as gaps. Dynamic divides the ring by however many
 entries there are, so a new entry moves all the others.
+
+The same screen carries the menu's own colours and the order of its entries. Every wheel has one, the root included.
+
+![Menu settings](/docs/assets/menu-settings.png)
 
 #### Commands
 
@@ -108,9 +137,16 @@ RadialMenu/
 One file per profile, so a profile can be copied between installations or handed to someone else. A broken file
 never stops the client from starting — anything unreadable is repaired or skipped.
 
+![Profiles](/docs/assets/profiles.png)
+
 Each profile carries its own **auto-bind rules**, which switch to it on their own when you join a world: by server
 address, by single-player world folder, or any single-player world at all. The rules live inside the profile, so
 copying the file carries them with it.
+
+![Auto-bind rules](/docs/assets/auto-bind-rules.png)
+
+**Use current world** fills a rule in exactly as the client will later compare it, which is the reliable way to get
+a server address right.
 
 The format is documented for hand-editing in [docs/PROFILE_FORMAT.md](docs/PROFILE_FORMAT.md) — every action type,
 its parameters, and which of them are required.
@@ -138,6 +174,14 @@ repainting everything else.
 
 Rather than picking six colours by hand, pick one **accent**: the editor fills the rest in from it, using the
 proportions in the Accent category. What it writes are ordinary colours, yours to adjust one at a time afterwards.
+
+#### The wheel itself
+
+Sector gap, line thickness, the soft edge and the plate behind each icon are all in the Wheel category.
+
+| Icons on their own | Icons on inventory slots |
+|---|---|
+| ![Plain wheel](/docs/assets/wheel-plain.png) | ![Wheel with plates](/docs/assets/wheel.png) |
 
 <a id="development"></a>
 
