@@ -19,6 +19,7 @@ import com.navatusein.radialmenu.client.gui.ui.UiCheckbox;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.gui.ui.UiTabButton;
 import com.navatusein.radialmenu.client.icon.IconRenderer;
+import com.navatusein.radialmenu.client.icon.PotionIcons;
 import com.navatusein.radialmenu.client.icon.SpriteAtlas;
 import com.navatusein.radialmenu.client.icon.UserIconLoader;
 import com.navatusein.radialmenu.core.model.IconSpec;
@@ -40,6 +41,7 @@ public class GuiIconPicker extends UiScreen {
     private enum Tab {
         ITEMS,
         SPRITES,
+        EFFECTS,
         FILES
     }
 
@@ -142,8 +144,8 @@ public class GuiIconPicker extends UiScreen {
         // Blank label: the swatch and the hex are drawn together in the overlay, because a centred button label
         // would sit underneath the swatch.
         GuiButton colorButton = new GuiButton(ID_COLOR, colorLeft, y, COLOR_WIDTH, Ui.ROW, "");
-        // Only sprites and untinted-by-choice PNGs take a colour; an item would ignore it.
-        colorButton.enabled = tab != Tab.ITEMS && !(tab == Tab.FILES && originalColors);
+        // Only sprites and untinted-by-choice PNGs take a colour; an item or an effect carries its own.
+        colorButton.enabled = tab == Tab.SPRITES || (tab == Tab.FILES && !originalColors);
         this.buttonList.add(colorButton);
         tooltip(ID_COLOR, I18n.format("radialmenu.icons.color.tip"));
         this.buttonList.add(new GuiButton(ID_REFRESH, refreshLeft, y, Ui.ROW, Ui.ROW, "R"));
@@ -273,6 +275,19 @@ public class GuiIconPicker extends UiScreen {
                     visible.add(sprite.name);
                 }
                 break;
+            case EFFECTS:
+                for (String name : PotionIcons.list()) {
+                    // Matched on the translated name as well: a player looking for Speed should not have to know
+                    // the game calls it potion.moveSpeed.
+                    if (needle.isEmpty() || name.toLowerCase()
+                        .contains(needle)
+                        || I18n.format(name)
+                            .toLowerCase()
+                            .contains(needle)) {
+                        visible.add(name);
+                    }
+                }
+                break;
             case FILES:
                 for (String name : UserIconLoader.listFiles()) {
                     if (needle.isEmpty() || name.toLowerCase()
@@ -292,11 +307,25 @@ public class GuiIconPicker extends UiScreen {
         scrollRow = Math.max(0, Math.min(maxRow, scrollRow));
     }
 
+    /**
+     * What to call the entry under the cursor.
+     *
+     * <p>
+     * An effect is named by its unlocalized key, which is what gets stored; showing "potion.moveSpeed" where the
+     * game says "Speed" would make the player translate it themselves. Everything else is already an id they would
+     * recognise and might well want to copy into a profile by hand.
+     */
+    private String hoverLabel(String name) {
+        return tab == Tab.EFFECTS ? I18n.format(name) : name;
+    }
+
     /** Builds the spec for an entry of the current tab, so drawing and picking cannot disagree about it. */
     private IconSpec specFor(String name) {
         switch (tab) {
             case SPRITES:
                 return IconSpec.sprite(SpriteAtlas.qualify(name), color);
+            case EFFECTS:
+                return IconSpec.effect(name);
             case FILES:
                 IconSpec file = IconSpec.file(name);
                 // Null means untinted, which is how the artwork's own colours survive.
@@ -386,7 +415,7 @@ public class GuiIconPicker extends UiScreen {
         if (hoveredName != null) {
             this.drawCenteredString(
                 this.fontRendererObj,
-                hoveredName,
+                hoverLabel(hoveredName),
                 this.width / 2,
                 gridBottom() + Ui.GAP,
                 0xFFFFFF80);

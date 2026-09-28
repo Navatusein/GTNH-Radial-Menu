@@ -186,8 +186,16 @@ Other traps the same code has already fallen into:
 
 ## Icons and colours
 
-Icons come in three kinds: a registry item, a sprite from the bundled Phosphor sheet, or a PNG from
-`<game folder>/RadialMenu/icons`.
+Icons come in four kinds: a registry item, a sprite from the bundled Phosphor sheet, a PNG from
+`<game folder>/RadialMenu/icons`, or a status effect. Effects are cut out of vanilla's own inventory sheet rather
+than copied into an atlas of ours, which is what makes modded effects work at all. They are keyed by the potion's
+unlocalized name, because effect ids are assigned in load order and would silently repoint at a different effect when
+a pack changes.
+
+**Bind the sheet, then ask for the index — that order is load-bearing.** A modded effect overrides
+`getStatusIconIndex()` to rebind its own texture on the way out, which is how 1.7.10 mods ship effect icons at all.
+Caching the index and binding vanilla's sheet afterwards throws that rebind away and cuts the mod's index out of
+vanilla's sheet: a neighbouring icon, drawn with complete confidence.
 
 **Draw items with the content, before any button.** `IconRenderer` copies the state sequence `GuiContainer` uses
 around its slots, including `GL_RESCALE_NORMAL` and forcing the lightmap to full brightness. A block is drawn scaled
@@ -251,6 +259,6 @@ wheel rendering and lifecycle, keybind action (tap/toggle/hold), profile-switch 
 placeholders, action chains, submenu-as-action-type with per-menu layout and colours, entry reordering, the full
 editor, and `/radialmenu`.
 
-Not built yet: inventory moves, backpack integration, mob-effect icons. `GuiMenuSettings` still carries its own copy
+Not built yet: inventory moves, backpack integration. `GuiMenuSettings` still carries its own copy
 of the generated-field code rather than sharing `GuiActionEditor`'s; it edits a node through `SubmenuFields` rather
 than an action, so the two have not been merged.

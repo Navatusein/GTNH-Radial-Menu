@@ -49,6 +49,7 @@ radialmenu.rules.type.singleplayer=Singleplayer
 
 radialmenu.icons.items=Items
 radialmenu.icons.sprites=Sprites
+radialmenu.icons.effects=Effects
 radialmenu.icons.files=My PNGs
 radialmenu.icons.noMatches=Nothing matches that search
 radialmenu.icons.noFiles=Drop PNG files into RadialMenu/icons, then press R
