@@ -1,6 +1,5 @@
 package com.navatusein.radialmenu.client.gui.ui;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -28,6 +27,9 @@ import com.navatusein.radialmenu.client.gui.GuiStack;
  * processed against a button list replaced underneath it.
  */
 public abstract class UiScreen extends GuiScreen {
+
+    /** How wide a tooltip is allowed to get before it wraps. About two thirds of a 320-wide dialog. */
+    private static final int TOOLTIP_WIDTH = 200;
 
     protected static final int ID_PRIMARY = 90;
     protected static final int ID_SECONDARY = 91;
@@ -425,8 +427,10 @@ public abstract class UiScreen extends GuiScreen {
             }
             String text = tooltips.get(Integer.valueOf(button.id));
             if (text != null) {
-                List<String> lines = new ArrayList<>();
-                lines.add(text);
+                // Wrapped rather than run out as one line: a tooltip explaining a setting is a sentence, and a
+                // sentence drawn unbroken reaches the far edge of the screen from a button in the middle of it.
+                @SuppressWarnings("unchecked")
+                List<String> lines = this.fontRendererObj.listFormattedStringToWidth(text, TOOLTIP_WIDTH);
                 drawHoveringText(lines, mouseX, mouseY, this.fontRendererObj);
             }
             return;

@@ -9,15 +9,20 @@ import net.minecraft.client.resources.I18n;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
+import com.navatusein.radialmenu.client.gui.ui.UiColorButton;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.icon.IconRenderer;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
+import com.navatusein.radialmenu.config.ColorConfig;
 import com.navatusein.radialmenu.core.action.ActionField;
 import com.navatusein.radialmenu.core.action.ActionSpec;
 import com.navatusein.radialmenu.core.action.ActionType;
 import com.navatusein.radialmenu.core.action.ActionTypes;
 import com.navatusein.radialmenu.core.model.MenuNode;
 import com.navatusein.radialmenu.core.model.SlotLayout;
+import com.navatusein.radialmenu.core.model.StyleResolver;
+
+import cpw.mods.fml.client.config.GuiSlider;
 
 /**
  * Settings of the wheel currently on screen: its name, how its slots are laid out, and its colours.
@@ -33,6 +38,7 @@ import com.navatusein.radialmenu.core.model.SlotLayout;
 public class GuiMenuSettings extends UiScreen {
 
     private static final int ID_FIELD_BASE = 40;
+    private static final int ID_CLEAR_BASE = 100;
     private static final int ID_UP_BASE = 200;
     private static final int ID_DOWN_BASE = 300;
 
@@ -49,7 +55,20 @@ public class GuiMenuSettings extends UiScreen {
     private String titleText;
 
     private final List<ActionField> fields = new ArrayList<>();
+
+    /**
+     * Where each field row was actually put.
+     *
+     * <p>
+     * Recorded rather than recomputed when the labels are drawn: a row that stands apart carries a gap the drawing
+     * loop would have to know about too, and two copies of that arithmetic is how a label ends up beside the wrong
+     * control.
+     */
+    private final List<Integer> fieldRowTops = new ArrayList<>();
     private final List<GuiTextField> inputs = new ArrayList<>();
+
+    /** Parallel to the fields, like the text boxes: a slider holds its value in the widget rather than in the spec. */
+    private final List<GuiSlider> sliders = new ArrayList<>();
 
     /**
      * The menu's entries, reordered here and written back only on save.
@@ -93,6 +112,8 @@ public class GuiMenuSettings extends UiScreen {
     protected void buildControls() {
         fields.clear();
         inputs.clear();
+        sliders.clear();
+        fieldRowTops.clear();
 
         int left = contentLeft();
         int controlLeft = left + Ui.LABEL_WIDTH + Ui.GAP;
@@ -116,9 +137,54 @@ public class GuiMenuSettings extends UiScreen {
             tooltip(ID_FIELD_BASE + index, describe(field.tooltipKey()));
 
             String current = draft.getString(field.key, field.defaultValue);
-            if (field.kind == ActionField.Kind.ENUM || field.kind == ActionField.Kind.COLOR) {
-                this.buttonList.add(
-                    new GuiButton(ID_FIELD_BASE + index, controlLeft, y, controlWidth, Ui.ROW, label(field, current)));
+            sliders.add(null);
+
+            if (FieldControls.standsApart(field)) {
+                y += Ui.GAP;
+            }
+            fieldRowTops.add(Integer.valueOf(y));
+
+            if (FieldControls.isButton(field)) {
+                int mainWidth = FieldControls.hasClear(field) ? controlWidth - Ui.GAP - FieldControls.CLEAR_WIDTH
+                    : controlWidth;
+
+                boolean editable = field.kind != ActionField.Kind.COLOR || FieldControls.colorEnabled(field.key);
+
+                GuiButton main = field.kind == ActionField.Kind.COLOR
+                    ? colorButton(ID_FIELD_BASE + index, field, controlLeft, y, mainWidth)
+                    : new GuiButton(
+                        ID_FIELD_BASE + index,
+                        controlLeft,
+                        y,
+                        mainWidth,
+                        Ui.ROW,
+                        FieldControls.buttonLabel(field, current));
+                main.enabled = editable;
+                this.buttonList.add(main);
+                inputs.add(null);
+
+                if (FieldControls.hasClear(field)) {
+                    GuiButton clear = new GuiButton(
+                        ID_CLEAR_BASE + index,
+                        controlLeft + mainWidth + Ui.GAP,
+                        y,
+                        FieldControls.CLEAR_WIDTH,
+                        Ui.ROW,
+                        "x");
+                    clear.enabled = editable && current != null
+                        && !current.trim()
+                            .isEmpty();
+                    this.buttonList.add(clear);
+                    tooltip(ID_CLEAR_BASE + index, describe("radialmenu.profileColors.clear.tip"));
+                }
+                if (!editable) {
+                    tooltip(ID_FIELD_BASE + index, FieldControls.colorOffTip(field.key));
+                }
+            } else if (field.hasRange()) {
+                GuiSlider slider = FieldControls
+                    .slider(ID_FIELD_BASE + index, controlLeft, y, controlWidth, Ui.ROW, field, current);
+                this.buttonList.add(slider);
+                sliders.set(index, slider);
                 inputs.add(null);
             } else {
                 GuiTextField input = new GuiTextField(
@@ -132,6 +198,9 @@ public class GuiMenuSettings extends UiScreen {
                 inputs.add(input);
             }
             y += Ui.STEP;
+            if (FieldControls.standsApart(field)) {
+                y += Ui.GAP;
+            }
         }
 
         y += Ui.GAP;
@@ -175,14 +244,28 @@ public class GuiMenuSettings extends UiScreen {
             == SlotLayout.Mode.FIXED;
     }
 
-    private String label(ActionField field, String current) {
-        if (field.kind == ActionField.Kind.COLOR) {
-            return current == null || current.trim()
-                .isEmpty() ? I18n.format("radialmenu.editor.inherit") : current;
-        }
-        String key = field.valueLabelKey(current);
-        String translated = I18n.format(key);
-        return translated.equals(key) ? current : translated;
+    /**
+     * Where the accent picker opens.
+     *
+     * <p>
+     * On what this wheel is highlighted with now: an accent is not stored anywhere, so there is no last value to go
+     * back to, and the highlight is the colour a player would call the menu's.
+     */
+    private static String accentStart() {
+        int highlight = StyleResolver
+            .resolve(ColorConfig.defaultColors(), ProfileManager.active().style, null).highlight;
+        return String.format("#%06X", Integer.valueOf(highlight & 0x00FFFFFF));
+    }
+
+    /** A colour row: the value read live from the draft, beside a square of what it comes out as. */
+    private UiColorButton colorButton(int id, final ActionField field, int x, int y, int width) {
+        return new UiColorButton(id, x, y, width, new UiColorButton.Value() {
+
+            @Override
+            public String get() {
+                return draft.getString(field.key, "");
+            }
+        }, FieldControls.inheritedColor(field.key), I18n.format("radialmenu.editor.inherit"));
     }
 
     private static String describe(String key) {
@@ -198,6 +281,14 @@ public class GuiMenuSettings extends UiScreen {
         }
         if (button.id == ID_SECONDARY) {
             onCancel();
+            return;
+        }
+
+        int clearIndex = button.id - ID_CLEAR_BASE;
+        if (clearIndex >= 0 && clearIndex < fields.size()) {
+            capture();
+            draft.set(fields.get(clearIndex).key, "");
+            requestRebuild();
             return;
         }
 
@@ -236,11 +327,28 @@ public class GuiMenuSettings extends UiScreen {
             return;
         }
 
+        if (field.kind == ActionField.Kind.ACCENT) {
+            capture();
+            GuiStack.push(new GuiColorPicker(accentStart(), false, new GuiColorPicker.Result() {
+
+                @Override
+                public void onColorPicked(String hex) {
+                    FieldControls.applyAccent(draft, field, hex);
+                    requestRebuild();
+                }
+            }));
+            return;
+        }
+
         if (field.kind == ActionField.Kind.ENUM) {
+            // Rebuilding throws away anything typed but not yet read back, so it is read back first.
+            capture();
             int at = field.options.indexOf(current);
             String next = field.options.get((at + 1) % field.options.size());
             draft.set(field.key, next);
-            button.displayString = label(field, next);
+            // The layout decides whether an arrow can move an entry into a gap, so the rows have to be rebuilt with
+            // it rather than only relabelled.
+            requestRebuild();
         }
     }
 
@@ -252,6 +360,10 @@ public class GuiMenuSettings extends UiScreen {
             GuiTextField input = inputs.get(i);
             if (input != null) {
                 draft.set(fields.get(i).key, input.getText());
+            }
+            GuiSlider slider = sliders.get(i);
+            if (slider != null) {
+                draft.set(fields.get(i).key, Integer.toString(slider.getValueInt()));
             }
         }
     }
@@ -302,11 +414,12 @@ public class GuiMenuSettings extends UiScreen {
         }
         y += Ui.STEP;
 
-        for (ActionField field : fields) {
-            if (isVisibleRow(y)) {
-                Ui.rowLabel(Ui.fit(I18n.format(field.labelKey), Ui.LABEL_WIDTH), left, y);
+        for (int i = 0; i < fields.size() && i < fieldRowTops.size(); i++) {
+            int rowTop = fieldRowTops.get(i)
+                .intValue();
+            if (isVisibleRow(rowTop)) {
+                Ui.rowLabel(Ui.fit(I18n.format(fields.get(i).labelKey), Ui.LABEL_WIDTH), left, rowTop);
             }
-            y += Ui.STEP;
         }
 
         for (GuiTextField input : inputs) {

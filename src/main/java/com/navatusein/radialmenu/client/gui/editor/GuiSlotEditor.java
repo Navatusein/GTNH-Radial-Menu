@@ -37,7 +37,16 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
     private static final int ID_KEEP_OPEN = 2;
 
     private final MenuNode parent;
-    private final int slotIndex;
+
+    /**
+     * Position in the parent's child list, not the sector it is drawn in.
+     *
+     * <p>
+     * The caller has already translated, because only it knows which sector was clicked and where a new entry
+     * should go. Translating again here read the wrong entry on any dynamic wheel whose list still had the gaps a
+     * fixed layout left behind.
+     */
+    private final int childIndex;
 
     /** Working copy; the parent is only touched on save. */
     private final MenuNode draft;
@@ -52,11 +61,11 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
     private int iconPreviewLeft;
     private int iconPreviewTop;
 
-    public GuiSlotEditor(MenuNode parent, int slotIndex) {
+    public GuiSlotEditor(MenuNode parent, int childIndex) {
         this.parent = parent;
-        this.slotIndex = slotIndex;
+        this.childIndex = childIndex;
 
-        MenuNode existing = parent.childAt(slotIndex);
+        MenuNode existing = parent.childAtIndex(childIndex);
         this.draft = existing != null ? existing.copy()
             : MenuNode.leaf(
                 I18n.format("radialmenu.editor.newEntry"),
@@ -88,7 +97,8 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
 
     @Override
     protected Object[] titleArgs() {
-        return new Object[] { Integer.valueOf(slotIndex + 1) };
+        // Numbered by the sector, which is what the player clicked; on a dynamic wheel that is not the list position.
+        return new Object[] { Integer.valueOf(parent.slotForChildIndex(childIndex) + 1) };
     }
 
     @Override
@@ -212,7 +222,7 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
     }
 
     private void apply(MenuNode node) {
-        parent.setChildAt(slotIndex, node);
+        parent.setChildAt(childIndex, node);
         ProfileManager.active()
             .normalize();
         ProfileManager.saveActive();

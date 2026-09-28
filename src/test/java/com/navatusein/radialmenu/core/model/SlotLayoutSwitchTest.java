@@ -95,16 +95,31 @@ public class SlotLayoutSwitchTest {
     }
 
     @Test
-    public void aNewEntryOnADynamicWheelGoesIntoTheFirstGap() {
+    public void aNewEntryOnADynamicWheelGoesOnTheEnd() {
+        // The extra sector a dynamic wheel grows for adding is at the end of the ring, so that is where the entry
+        // has to land. Filling the gap at position 1 instead dropped it into the middle of the menu.
         MenuNode menu = fixedWithGaps();
         menu.layout = SlotLayout.dynamic();
 
-        int index = menu.firstFreeIndex();
-        assertEquals(1, index);
+        int index = menu.appendIndex();
+        assertEquals("just past c, reusing the padding rather than growing past it", 5, index);
 
         menu.setChildAt(index, leaf("d"));
         assertEquals(4, menu.slotCount());
-        assertEquals("d", menu.childAt(1).title);
+        assertEquals("d", menu.childAt(3).title);
+    }
+
+    @Test
+    public void addingOnADynamicWheelDoesNotWidenTheFixedOneUnderIt() {
+        MenuNode menu = fixedWithGaps();
+        menu.layout = SlotLayout.dynamic();
+        menu.setChildAt(menu.appendIndex(), leaf("d"));
+
+        menu.layout = SlotLayout.fixed(8);
+        menu.ensureSlotCapacity();
+
+        assertEquals("the tail had room, so the wheel keeps its eight sectors", 8, menu.slotCount());
+        assertEquals("d", menu.childAt(5).title);
     }
 
     @Test
@@ -113,8 +128,8 @@ public class SlotLayoutSwitchTest {
         menu.setChildAt(0, leaf("a"));
         menu.setChildAt(1, leaf("b"));
 
-        assertEquals(2, menu.firstFreeIndex());
-        menu.setChildAt(menu.firstFreeIndex(), leaf("c"));
+        assertEquals(2, menu.appendIndex());
+        menu.setChildAt(menu.appendIndex(), leaf("c"));
 
         assertEquals(3, menu.slotCount());
         assertEquals("c", menu.childAt(2).title);
@@ -125,6 +140,33 @@ public class SlotLayoutSwitchTest {
         MenuNode menu = fixedWithGaps();
         assertEquals(3, menu.filledCount());
         assertNotNull(menu.childAt(0));
+    }
+
+    @Test
+    public void aListPositionIsNotASector() {
+        // Regression: the slot editor was handed a list position and looked it up as if it were a sector - a second
+        // translation. On a dynamic wheel still carrying a fixed layout's gaps, editing one entry opened the next
+        // one round the ring, and saving would have overwritten it.
+        MenuNode menu = fixedWithGaps();
+        menu.layout = SlotLayout.dynamic();
+
+        int index = menu.childIndexForSlot(1);
+        assertEquals(2, index);
+        assertEquals("b", menu.childAtIndex(index).title);
+        assertEquals("translated twice, position 2 reads as sector 2", "c", menu.childAt(index).title);
+    }
+
+    @Test
+    public void aListPositionReportsTheSectorItIsDrawnIn() {
+        MenuNode menu = fixedWithGaps();
+
+        assertEquals("a fixed wheel draws every position where it sits", 4, menu.slotForChildIndex(4));
+
+        menu.layout = SlotLayout.dynamic();
+        assertEquals(0, menu.slotForChildIndex(0));
+        assertEquals("one entry precedes the gap at position 1", 1, menu.slotForChildIndex(1));
+        assertEquals(1, menu.slotForChildIndex(2));
+        assertEquals(2, menu.slotForChildIndex(4));
     }
 
     @Test

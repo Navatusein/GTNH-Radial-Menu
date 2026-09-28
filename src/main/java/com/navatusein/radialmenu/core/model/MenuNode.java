@@ -105,6 +105,20 @@ public class MenuNode {
     }
 
     /**
+     * Entry at a position in {@link #children}, or null for an empty position or one past the end.
+     *
+     * <p>
+     * Deliberately separate from {@link #childAt(int)}: one takes a sector, the other a list position, and on a
+     * dynamic wheel with gaps in the list they are different numbers. Passing a list position to the sector version
+     * translates it a second time, which is how the editor for a free position came to open the entry six sectors
+     * along.
+     */
+    public MenuNode childAtIndex(int index) {
+        List<MenuNode> kids = childrenOrEmpty();
+        return index >= 0 && index < kids.size() ? kids.get(index) : null;
+    }
+
+    /**
      * Index in {@link #children} of the entry drawn in a sector, or -1 if there is none.
      *
      * <p>
@@ -131,15 +145,52 @@ public class MenuNode {
         return -1;
     }
 
-    /** First position with no entry in it, or the end of the list. Where a new entry goes on a dynamic wheel. */
-    public int firstFreeIndex() {
+    /**
+     * Sector a list position is drawn in - the inverse of {@link #childIndexForSlot(int)}.
+     *
+     * <p>
+     * On a fixed wheel the two are the same number. On a dynamic one the gaps are not drawn, so a position sits at
+     * the sector its filled predecessors leave it: list position 6 with two gaps before it is sector 4. Only the
+     * sector means anything to the player, who is looking at the ring and not at the file.
+     */
+    public int slotForChildIndex(int index) {
+        if (index < 0) {
+            return -1;
+        }
+        if (layoutOrDefault().mode == SlotLayout.Mode.FIXED) {
+            return index;
+        }
         List<MenuNode> kids = childrenOrEmpty();
-        for (int i = 0; i < kids.size(); i++) {
-            if (kids.get(i) == null) {
-                return i;
+        int seen = 0;
+        for (int i = 0; i < index && i < kids.size(); i++) {
+            if (kids.get(i) != null) {
+                seen++;
             }
         }
-        return kids.size();
+        return seen;
+    }
+
+    /**
+     * Position a new entry takes on a dynamic wheel: just past the last entry in the list.
+     *
+     * <p>
+     * The end, because that is where the player clicked - the extra sector a dynamic wheel grows for adding sits at
+     * the end of the ring. Filling the first gap instead put the new entry in the middle of any menu that had once
+     * been fixed, which is nowhere near the sector that was pressed.
+     *
+     * <p>
+     * Empty positions in the tail are reused rather than skipped past, so adding to a menu padded out by a fixed
+     * layout does not widen that layout by however many gaps its tail happened to carry.
+     */
+    public int appendIndex() {
+        List<MenuNode> kids = childrenOrEmpty();
+        int last = -1;
+        for (int i = 0; i < kids.size(); i++) {
+            if (kids.get(i) != null) {
+                last = i;
+            }
+        }
+        return last + 1;
     }
 
     /**
