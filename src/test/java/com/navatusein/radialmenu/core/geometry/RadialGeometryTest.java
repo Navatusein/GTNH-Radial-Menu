@@ -1,6 +1,7 @@
 package com.navatusein.radialmenu.core.geometry;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -84,5 +85,31 @@ public class RadialGeometryTest {
     public void degenerateSlotCountsDoNotThrow() {
         assertEquals(RadialGeometry.NO_SLOT, RadialGeometry.slotAtAngle(12.0, 0, 0.0));
         assertEquals(0.0, RadialGeometry.sectorSpan(0), 1e-6);
+    }
+
+    @Test
+    public void aGapIsADistanceAndNotAnAngle() {
+        // Half a four pixel gap is two pixels from the boundary, whatever radius it is measured at - so the angle
+        // that buys is wider at the hole than at the rim. Inset by one angle instead and the gap fans out.
+        double inner = Math.toDegrees(Math.asin(2.0 / 32.0));
+        double outer = Math.toDegrees(Math.asin(2.0 / 80.0));
+
+        assertEquals(inner, RadialGeometry.gapInsetDegrees(32.0, 4.0), 1e-9);
+        assertEquals(outer, RadialGeometry.gapInsetDegrees(80.0, 4.0), 1e-9);
+        assertTrue("the hole end of a sector gives up more degrees than the rim", inner > outer);
+    }
+
+    @Test
+    public void noGapInsetsNothing() {
+        assertEquals(0.0, RadialGeometry.gapInsetDegrees(32.0, 0.0), 0.0);
+        assertEquals(0.0, RadialGeometry.gapInsetDegrees(32.0, -4.0), 0.0);
+        assertEquals("a radius of nothing has no room to inset", 0.0, RadialGeometry.gapInsetDegrees(0.0, 4.0), 0.0);
+    }
+
+    @Test
+    public void aGapWiderThanTheRingDoesNotAskForAnImpossibleAngle() {
+        // asin would be undefined past one; a quarter turn is the most an inset can ever mean, and the sector that
+        // asks for it simply has nothing left to draw.
+        assertEquals(90.0, RadialGeometry.gapInsetDegrees(8.0, 40.0), 0.0);
     }
 }

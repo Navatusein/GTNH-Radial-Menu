@@ -20,10 +20,11 @@ import org.lwjgl.opengl.GL12;
 
 import com.navatusein.radialmenu.RadialMenuMod;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
-import com.navatusein.radialmenu.config.RadialMenuConfig;
+import com.navatusein.radialmenu.config.ColorConfig;
 import com.navatusein.radialmenu.core.Colors;
 import com.navatusein.radialmenu.core.model.IconSpec;
-import com.navatusein.radialmenu.core.model.MenuStyle;
+import com.navatusein.radialmenu.core.model.StyleResolver;
+import com.navatusein.radialmenu.core.model.WheelColors;
 
 /**
  * Draws whatever a slot's {@link IconSpec} points at.
@@ -136,14 +137,16 @@ public final class IconRenderer {
         return icon.color == null ? 0xFFFFFF : resolveTint(icon.color);
     }
 
-    /** The same resolution for a bare colour string, so the editor can show what inheriting will look like. */
+    /**
+     * The same resolution for a bare colour string, so the editor can show what inheriting will look like.
+     *
+     * <p>
+     * Asked of the same resolver the wheel uses rather than walking the chain again here. The chain had two
+     * implementations once, and they drifted.
+     */
     public static int resolveTint(String override) {
-        int tint = Colors.parseArgb(RadialMenuConfig.iconColor, 0xFFFFFF) & 0x00FFFFFF;
-        MenuStyle profileStyle = ProfileManager.active().style;
-        if (profileStyle != null) {
-            tint = Colors.over(profileStyle.iconColor, tint) & 0x00FFFFFF;
-        }
-        return Colors.over(override, tint) & 0x00FFFFFF;
+        WheelColors colors = StyleResolver.resolve(ColorConfig.defaultColors(), ProfileManager.active().style, null);
+        return Colors.over(override, colors.icon) & 0x00FFFFFF;
     }
 
     private static void drawSprite(IconSpec icon, int x, int y, int size) {

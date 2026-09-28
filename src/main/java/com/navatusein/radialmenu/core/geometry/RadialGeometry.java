@@ -77,6 +77,30 @@ public final class RadialGeometry {
         return -Math.cos(Math.toRadians(angleDegrees)) * radius;
     }
 
+    /**
+     * Half the angle a gap of {@code gapPixels} takes up at {@code radius}, in degrees.
+     *
+     * <p>
+     * A gap between sectors is a distance, not an angle. Inset by a fixed angle instead and the gap fans out - wide
+     * at the rim, pinched at the hole - which is what a wheel drawn with narrow sectors used to look like. Insetting
+     * each radius by {@code asin(halfGap / radius)} keeps the two sectors a constant distance apart all the way
+     * along, so the edges between them are straight lines.
+     *
+     * <p>
+     * Purely how the ring is drawn: which sector a click lands in is still worked out from the full, undivided
+     * sector, because the gap is a look and not a target the player has to avoid.
+     */
+    public static double gapInsetDegrees(double radius, double gapPixels) {
+        if (gapPixels <= 0.0 || radius <= 0.0) {
+            return 0.0;
+        }
+        double half = gapPixels / 2.0;
+        if (half >= radius) {
+            return 90.0;
+        }
+        return Math.toDegrees(Math.asin(half / radius));
+    }
+
     /** How many line segments to use when tessellating one sector's arc, so big sectors stay round. */
     public static int arcSegments(double spanDegrees) {
         return Math.max(8, (int) Math.ceil(spanDegrees / 4.0));
