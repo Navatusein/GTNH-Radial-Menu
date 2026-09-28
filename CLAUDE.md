@@ -284,6 +284,22 @@ Icon tints distinguish two kinds of blank: **null keeps the artwork's own colour
 which optional colour the third argument meant — the types matched either way round, so the compiler would have said
 nothing while the colours quietly swapped.
 
+**The wheel's clock runs on time, not ticks.** A GUI is drawn as fast as the machine manages, so a reveal spread
+over twelve frames takes a quarter of a second on one machine and two on another. `WheelAnimator` keeps the elapsed
+time from `System.nanoTime()` (capped per frame, or a stutter becomes a jump) and `core/animation/RevealTiming` does
+the arithmetic, where it is unit tested. A stagger spends part of the duration handing the animation from the first
+sector to the last rather than adding to it, so every wheel is finished after `revealDurationMs` whichever way it
+was revealed.
+
+**Icons wait rather than fade.** An item is drawn by vanilla's `RenderItem`, which sets its own colour, so there is
+no alpha to give it. They appear when their sector is half arrived; drawn from the first frame they would all be
+piled in the middle while the ring grows around them.
+
+**The outline belongs to each sector, never to the ring.** Two circles plus a set of dividers is the same picture
+while nothing moves — and the moment one sector grows or leans out towards the cursor, the ring stays behind and
+cuts across it. Each sector draws its own arcs and sides; with no gap the sides are half a width each, so two
+neighbours meet as the single line that used to straddle the boundary.
+
 **The plate behind an icon is vanilla's own art.** `slotPlate` cuts the inventory's slot cell out of
 `textures/gui/container/inventory.png` at (7, 141) and the hotbar's selection frame out of `textures/gui/widgets.png`
 at (0, 22) — the coordinates come from `ContainerPlayer`'s hotbar slots at `8 + i * 18, 142` and `GuiIngame`'s own
