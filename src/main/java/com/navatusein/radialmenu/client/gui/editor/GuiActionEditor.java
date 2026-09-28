@@ -12,15 +12,20 @@ import net.minecraft.client.resources.I18n;
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
 import com.navatusein.radialmenu.client.gui.ui.UiCheckbox;
+import com.navatusein.radialmenu.client.gui.ui.UiColorButton;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.gui.ui.UiTabButton;
+import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileStorage;
+import com.navatusein.radialmenu.config.ColorConfig;
 import com.navatusein.radialmenu.core.action.ActionField;
 import com.navatusein.radialmenu.core.action.ActionSpec;
 import com.navatusein.radialmenu.core.action.ActionSteps;
 import com.navatusein.radialmenu.core.action.ActionType;
 import com.navatusein.radialmenu.core.action.ActionTypes;
-import com.navatusein.radialmenu.core.action.Placeholders;
+import com.navatusein.radialmenu.core.model.StyleResolver;
+
+import cpw.mods.fml.client.config.GuiSlider;
 
 /**
  * The "what this does" half of an editor: the action-type tabs, the fields the chosen type declares, and - for a
@@ -39,6 +44,9 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
 
     protected static final int ID_TAB_BASE = 10;
     protected static final int ID_FIELD_BASE = 40;
+
+    /** The button that empties a colour, one per field row. */
+    private static final int ID_CLEAR_BASE = 200;
 
     /** Step controls are numbered far apart, so a long chain cannot reach into the next range. */
     private static final int ID_STEP_ADD = 300;
@@ -67,6 +75,9 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
     private final List<ActionField> editableFields = new ArrayList<>();
     private final List<GuiTextField> fieldInputs = new ArrayList<>();
 
+    /** Parallel to the fields, like the text boxes: a slider holds its value in the widget rather than in the spec. */
+    private final List<GuiSlider> fieldSliders = new ArrayList<>();
+
     /** Row tops recorded during the build, so drawing never replays the layout arithmetic and disagrees with it. */
     private final List<Integer> fieldRowTops = new ArrayList<>();
 
@@ -93,6 +104,7 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
     protected int buildActionSection(int y, int left, int controlLeft, int controlWidth) {
         editableFields.clear();
         fieldInputs.clear();
+        fieldSliders.clear();
         fieldRowTops.clear();
         stepsSectionTop = -1;
         stepCount = 0;
@@ -119,8 +131,14 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
         }
 
         for (ActionField field : selected.fields) {
+            if (FieldControls.standsApart(field)) {
+                y += Ui.GAP;
+            }
             addFieldControl(field, controlLeft, controlWidth, y);
             y += Ui.STEP;
+            if (FieldControls.standsApart(field)) {
+                y += Ui.GAP;
+            }
         }
 
         if (selected.chain) {
@@ -173,79 +191,73 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
         tooltip(ID_FIELD_BASE + index, describe(field.tooltipKey()));
 
         String current = spec.getString(field.key, field.defaultValue);
+        fieldSliders.add(null);
 
-        switch (field.kind) {
-            case KEYBIND_REF:
-            case MULTILINE_STRING:
-            case ENUM:
-            case PROFILE_REF:
-            case COLOR:
-                this.buttonList.add(
-                    new GuiButton(
-                        ID_FIELD_BASE + index,
-                        controlLeft,
-                        y,
-                        controlWidth,
-                        Ui.ROW,
-                        buttonValueLabel(field, current)));
-                fieldInputs.add(null);
-                break;
-            case BOOLEAN:
-                this.buttonList.add(
-                    new UiCheckbox(
-                        ID_FIELD_BASE + index,
-                        controlLeft,
-                        y,
-                        controlWidth,
-                        I18n.format(field.labelKey),
-                        Boolean.parseBoolean(current)));
-                fieldInputs.add(null);
-                break;
-            default:
-                GuiTextField input = new GuiTextField(
-                    this.fontRendererObj,
-                    controlLeft + 1,
-                    y + 3,
-                    controlWidth - 2,
-                    14);
-                input.setMaxStringLength(256);
-                input.setText(current == null ? "" : current);
-                fieldInputs.add(input);
-                break;
-        }
-    }
+        if (FieldControls.isButton(field)) {
+            int mainWidth = FieldControls.hasClear(field) ? controlWidth - Ui.GAP - FieldControls.CLEAR_WIDTH
+                : controlWidth;
 
-    private String buttonValueLabel(ActionField field, String current) {
-        switch (field.kind) {
-            case KEYBIND_REF:
-                return current == null || current.isEmpty() ? I18n.format("radialmenu.editor.pickKeybind")
-                    : I18n.format(current);
-            case MULTILINE_STRING:
-                return I18n.format("radialmenu.editor.editLines", Placeholders.splitLines(current).length);
-            case COLOR:
-                return current == null || current.trim()
-                    .isEmpty() ? I18n.format("radialmenu.editor.inherit") : current;
-            case ENUM:
-                return localizedValue(field, current);
-            default:
-                return current == null ? "" : current;
-        }
-    }
+            boolean editable = field.kind != ActionField.Kind.COLOR || FieldControls.colorEnabled(field.key);
 
-    /**
-     * Shows an enum value the way the rest of the interface is written.
-     *
-     * <p>
-     * The stored value stays lower case; only the display changes. A value with no translation falls back to itself
-     * rather than showing a raw key, so an action type that forgot a string still reads as something.
-     */
-    private static String localizedValue(ActionField field, String value) {
-        if (value == null || value.isEmpty()) {
-            return "";
+            GuiButton main = field.kind == ActionField.Kind.COLOR
+                ? colorButton(ID_FIELD_BASE + index, field, controlLeft, y, mainWidth)
+                : new GuiButton(
+                    ID_FIELD_BASE + index,
+                    controlLeft,
+                    y,
+                    mainWidth,
+                    Ui.ROW,
+                    FieldControls.buttonLabel(field, current));
+            main.enabled = editable;
+            this.buttonList.add(main);
+            fieldInputs.add(null);
+
+            if (FieldControls.hasClear(field)) {
+                GuiButton clear = new GuiButton(
+                    ID_CLEAR_BASE + index,
+                    controlLeft + mainWidth + Ui.GAP,
+                    y,
+                    FieldControls.CLEAR_WIDTH,
+                    Ui.ROW,
+                    "x");
+                clear.enabled = editable && current != null
+                    && !current.trim()
+                        .isEmpty();
+                this.buttonList.add(clear);
+                tooltip(ID_CLEAR_BASE + index, describe("radialmenu.profileColors.clear.tip"));
+            }
+            if (!editable) {
+                tooltip(ID_FIELD_BASE + index, FieldControls.colorOffTip(field.key));
+            }
+            return;
         }
-        String key = field.valueLabelKey(value);
-        String translated = I18n.format(key);
-        return translated.equals(key) ? value : translated;
+
+        if (field.kind == ActionField.Kind.BOOLEAN) {
+            this.buttonList.add(
+                new UiCheckbox(
+                    ID_FIELD_BASE + index,
+                    controlLeft,
+                    y,
+                    controlWidth,
+                    I18n.format(field.labelKey),
+                    Boolean.parseBoolean(current)));
+            fieldInputs.add(null);
+            return;
+        }
+
+        if (field.hasRange()) {
+            GuiSlider slider = FieldControls
+                .slider(ID_FIELD_BASE + index, controlLeft, y, controlWidth, Ui.ROW, field, current);
+            this.buttonList.add(slider);
+            fieldSliders.set(index, slider);
+            fieldInputs.add(null);
+            return;
+        }
+
+        GuiTextField input = new GuiTextField(this.fontRendererObj, controlLeft + 1, y + 3, controlWidth - 2, 14);
+        input.setMaxStringLength(256);
+        input.setText(current == null ? "" : current);
+        fieldInputs.add(input);
     }
 
     // -- input ---------------------------------------------------------------------------------------------------
@@ -268,6 +280,14 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
         int tabIndex = button.id - ID_TAB_BASE;
         if (tabIndex >= 0 && tabIndex < types.size()) {
             selectType(types.get(tabIndex).id);
+            return true;
+        }
+
+        int clearIndex = button.id - ID_CLEAR_BASE;
+        if (clearIndex >= 0 && clearIndex < editableFields.size()) {
+            captureInputs();
+            spec.set(editableFields.get(clearIndex).key, "");
+            requestRebuild();
             return true;
         }
 
@@ -353,7 +373,27 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
             .newSpec();
     }
 
-    private void onFieldButton(ActionField field, GuiButton button) {
+    /** A colour row: the value read live from the spec, beside a square of what it comes out as. */
+    private UiColorButton colorButton(int id, final ActionField field, int x, int y, int width) {
+        return new UiColorButton(id, x, y, width, new UiColorButton.Value() {
+
+            @Override
+            public String get() {
+                return spec.getString(field.key, "");
+            }
+        }, FieldControls.inheritedColor(field.key), I18n.format("radialmenu.editor.inherit"));
+    }
+
+    /** Where the accent picker opens: what this wheel is highlighted with now, which is the colour of its look. */
+    private String accentStart() {
+        return String.format(
+            "#%06X",
+            Integer.valueOf(
+                StyleResolver.resolve(ColorConfig.defaultColors(), ProfileManager.active().style, null).highlight
+                    & 0x00FFFFFF));
+    }
+
+    private void onFieldButton(final ActionField field, GuiButton button) {
         final String key = field.key;
         String current = spec.getString(key, field.defaultValue);
 
@@ -384,6 +424,18 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
                     }
                 }));
                 return;
+            case ACCENT:
+                captureInputs();
+                // Nothing to open it on: an accent is not stored, so every pick starts from the wheel's own colour.
+                GuiStack.push(new GuiColorPicker(accentStart(), false, new GuiColorPicker.Result() {
+
+                    @Override
+                    public void onColorPicked(String hex) {
+                        FieldControls.applyAccent(spec, field, hex);
+                        requestRebuild();
+                    }
+                }));
+                return;
             case BOOLEAN:
                 ((UiCheckbox) button).toggle();
                 spec.set(key, Boolean.toString(((UiCheckbox) button).checked));
@@ -397,7 +449,7 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
             default:
                 return;
         }
-        button.displayString = buttonValueLabel(field, spec.getString(key, ""));
+        button.displayString = FieldControls.buttonLabel(field, spec.getString(key, ""));
     }
 
     @Override
@@ -413,6 +465,12 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
             GuiTextField input = fieldInputs.get(i);
             if (input != null) {
                 spec.set(editableFields.get(i).key, input.getText());
+            }
+            // A slider keeps its value in the widget, so it is read here with everything else rather than written
+            // on every drag.
+            GuiSlider slider = fieldSliders.get(i);
+            if (slider != null) {
+                spec.set(editableFields.get(i).key, Integer.toString(slider.getValueInt()));
             }
         }
     }

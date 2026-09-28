@@ -6,6 +6,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.navatusein.radialmenu.core.model.SlotLayout;
+
 /**
  * Registry of known action types.
  *
@@ -53,9 +55,14 @@ public final class ActionTypes {
     public static final String PARAM_CYCLE = "cycle";
     public static final String PARAM_SLOT_MODE = "slotMode";
     public static final String PARAM_SLOT_COUNT = "slots";
+    public static final String PARAM_ACCENT = "accent";
     public static final String PARAM_RING_COLOR = "ringColor";
     public static final String PARAM_HIGHLIGHT_COLOR = "highlightColor";
     public static final String PARAM_BORDER_COLOR = "borderColor";
+    /** Not offered on a submenu - an entry owns its icon tint - but named here with the other colours. */
+    public static final String PARAM_ICON_COLOR = "iconColor";
+    public static final String PARAM_HIGHLIGHT_BORDER_COLOR = "highlightBorderColor";
+    public static final String PARAM_BACKGROUND_COLOR = "backgroundColor";
 
     private static final Map<String, ActionType> TYPES = new LinkedHashMap<>();
 
@@ -131,10 +138,27 @@ public final class ActionTypes {
                 "radialmenu.action.submenu",
                 false,
                 ActionField.enumeration(PARAM_SLOT_MODE, "radialmenu.action.submenu.mode", "fixed", "fixed", "dynamic"),
-                ActionField.integer(PARAM_SLOT_COUNT, "radialmenu.action.submenu.slots", 8),
+                ActionField.range(
+                    PARAM_SLOT_COUNT,
+                    "radialmenu.action.submenu.slots",
+                    SlotLayout.DEFAULT_SLOTS,
+                    SlotLayout.MIN_SLOTS,
+                    SlotLayout.MAX_SLOTS),
+                ActionField.accent(
+                    PARAM_ACCENT,
+                    "radialmenu.action.submenu.accent",
+                    PARAM_RING_COLOR,
+                    PARAM_HIGHLIGHT_COLOR,
+                    PARAM_BORDER_COLOR,
+                    PARAM_HIGHLIGHT_BORDER_COLOR,
+                    PARAM_BACKGROUND_COLOR),
+                // A fill and its outline, twice: the ring, then the sector under the cursor. Changing one of a
+                // pair almost always means changing the other, so they are adjacent.
                 ActionField.color(PARAM_RING_COLOR, "radialmenu.action.submenu.ringColor"),
+                ActionField.color(PARAM_BORDER_COLOR, "radialmenu.action.submenu.borderColor"),
                 ActionField.color(PARAM_HIGHLIGHT_COLOR, "radialmenu.action.submenu.highlightColor"),
-                ActionField.color(PARAM_BORDER_COLOR, "radialmenu.action.submenu.borderColor")));
+                ActionField.color(PARAM_HIGHLIGHT_BORDER_COLOR, "radialmenu.action.submenu.highlightBorderColor"),
+                ActionField.color(PARAM_BACKGROUND_COLOR, "radialmenu.action.submenu.backgroundColor")));
 
         register(
             new ActionType(

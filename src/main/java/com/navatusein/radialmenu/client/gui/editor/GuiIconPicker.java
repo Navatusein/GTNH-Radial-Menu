@@ -3,12 +3,16 @@ package com.navatusein.radialmenu.client.gui.editor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
+import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
 import net.minecraft.util.EnumChatFormatting;
 
 import org.lwjgl.input.Mouse;
@@ -45,6 +49,33 @@ public class GuiIconPicker extends UiScreen {
         FILES
     }
 
+    /**
+     * One cell of the grid: what to draw, what to call it, and what a search has to match.
+     *
+     * <p>
+     * An item carries its metadata, because a great many of them are one registry name with the difference held
+     * there - every dye, every colour of stained clay, every material family a GT pack adds. Listing the registry
+     * name alone showed white stained clay and hid the other fifteen colours outright.
+     *
+     * <p>
+     * The label is what the game calls the thing, and it is folded into the search text: a player hunting for lime
+     * clay is reading tooltips, not {@code minecraft:stained_hardened_clay}.
+     */
+    private static final class Entry {
+
+        final String id;
+        final int meta;
+        final String label;
+        final String search;
+
+        Entry(String id, int meta, String label) {
+            this.id = id;
+            this.meta = meta;
+            this.label = label == null || label.isEmpty() ? id : label;
+            this.search = (id + ' ' + this.label).toLowerCase();
+        }
+    }
+
     private static final int ID_TAB_BASE = 10;
     private static final int ID_COLOR = 20;
     private static final int ID_REFRESH = 21;
@@ -64,8 +95,8 @@ public class GuiIconPicker extends UiScreen {
 
     private Tab tab = Tab.ITEMS;
 
-    private final List<String> itemNames = new ArrayList<>();
-    private final List<String> visible = new ArrayList<>();
+    private final List<Entry> itemEntries = new ArrayList<>();
+    private final List<Entry> visible = new ArrayList<>();
 
     private GuiTextField searchField;
     private String query = "";
@@ -118,8 +149,8 @@ public class GuiIconPicker extends UiScreen {
 
     @Override
     protected void buildControls() {
-        if (itemNames.isEmpty()) {
-            loadItemNames();
+        if (itemEntries.isEmpty()) {
+            loadItems();
         }
 
         int left = contentLeft();
@@ -213,9 +244,14 @@ public class GuiIconPicker extends UiScreen {
      * Vanilla first, then mods by id. Inside a mod the numeric registry id is used, which is the order that mod
      * registered its items in: tiers, tools and material families come out adjacent, the way their author grouped
      * them. Sorting the names alphabetically instead would split those families wherever the naming is not perfectly
-     * consistent, which in practice is everywhere.
+     * consistent, which in practice is everywhere. The names are sorted first and expanded into subtypes afterwards,
+     * so an item's own subtypes stay together and in the order it lists them.
+     *
+     * <p>
+     * Built once, on the first open. Asking every item in a GT pack for its subtypes and every subtype for its name
+     * is a second's work; doing it per keystroke would not be.
      */
-    private void loadItemNames() {
+    private void loadItems() {
         List<String> names = new ArrayList<>();
         for (Object key : Item.itemRegistry.getKeys()) {
             names.add(String.valueOf(key));
@@ -229,7 +265,69 @@ public class GuiIconPicker extends UiScreen {
                 return byMod != 0 ? byMod : registryId(left) - registryId(right);
             }
         });
-        itemNames.addAll(names);
+
+        for (String name : names) {
+            Item item = (Item) Item.itemRegistry.getObject(name);
+            if (item == null) {
+                continue;
+            }
+            for (int meta : metasOf(item)) {
+                itemEntries.add(new Entry(name, meta, displayName(item, meta)));
+            }
+        }
+    }
+
+    /**
+     * The metadata values an item actually has, asked the way the creative menu asks: only the item knows which of
+     * the 32768 possible values mean anything.
+     *
+     * <p>
+     * Every tab the item claims is asked, because an item spanning several returns a different slice for each - that
+     * is what {@code getCreativeTabs} is for. Duplicates fall out on the damage value. An item that offers nothing,
+     * or throws trying, still gets its meta 0: nothing may drop out of the list for being awkward.
+     */
+    private static List<Integer> metasOf(Item item) {
+        List<ItemStack> stacks = new ArrayList<>();
+        CreativeTabs[] tabs = null;
+        try {
+            tabs = item.getCreativeTabs();
+        } catch (Throwable broken) {
+            // Same class of failure as below: an override that assumes more than a GUI can give it.
+        }
+        if (tabs == null || tabs.length == 0) {
+            // A null tab is what vanilla's own default is called with, and it yields the plain meta-0 stack.
+            tabs = new CreativeTabs[] { null };
+        }
+
+        for (CreativeTabs creativeTab : tabs) {
+            try {
+                item.getSubItems(item, creativeTab, stacks);
+            } catch (Throwable broken) {
+                // getSubItems can reach into world or config state the picker has no business having; the rest of
+                // the registry is still worth listing.
+            }
+        }
+
+        List<Integer> metas = new ArrayList<>();
+        Set<Integer> seen = new HashSet<>();
+        for (ItemStack stack : stacks) {
+            if (stack != null && seen.add(stack.getItemDamage())) {
+                metas.add(stack.getItemDamage());
+            }
+        }
+        if (metas.isEmpty()) {
+            metas.add(0);
+        }
+        return metas;
+    }
+
+    /** Resolved once, here, because the name comes from the item's own code and that code can throw. */
+    private static String displayName(Item item, int meta) {
+        try {
+            return new ItemStack(item, 1, meta).getDisplayName();
+        } catch (Throwable broken) {
+            return "";
+        }
     }
 
     private static String domainOf(String name) {
@@ -263,36 +361,32 @@ public class GuiIconPicker extends UiScreen {
 
         switch (tab) {
             case ITEMS:
-                for (String name : itemNames) {
-                    if (needle.isEmpty() || name.toLowerCase()
-                        .contains(needle)) {
-                        visible.add(name);
+                for (Entry entry : itemEntries) {
+                    if (matches(entry, needle)) {
+                        visible.add(entry);
                     }
                 }
                 break;
             case SPRITES:
                 for (SpriteAtlas.Sprite sprite : SpriteAtlas.search(needle)) {
-                    visible.add(sprite.name);
+                    visible.add(new Entry(sprite.name, 0, null));
                 }
                 break;
             case EFFECTS:
                 for (String name : PotionIcons.list()) {
                     // Matched on the translated name as well: a player looking for Speed should not have to know
                     // the game calls it potion.moveSpeed.
-                    if (needle.isEmpty() || name.toLowerCase()
-                        .contains(needle)
-                        || I18n.format(name)
-                            .toLowerCase()
-                            .contains(needle)) {
-                        visible.add(name);
+                    Entry entry = new Entry(name, 0, I18n.format(name));
+                    if (matches(entry, needle)) {
+                        visible.add(entry);
                     }
                 }
                 break;
             case FILES:
                 for (String name : UserIconLoader.listFiles()) {
-                    if (needle.isEmpty() || name.toLowerCase()
-                        .contains(needle)) {
-                        visible.add(name);
+                    Entry entry = new Entry(name, 0, null);
+                    if (matches(entry, needle)) {
+                        visible.add(entry);
                     }
                 }
                 break;
@@ -300,6 +394,11 @@ public class GuiIconPicker extends UiScreen {
                 break;
         }
         clampScroll();
+    }
+
+    /** One haystack per entry, so the id and the name the player reads are searched in a single pass. */
+    private static boolean matches(Entry entry, String needle) {
+        return needle.isEmpty() || entry.search.contains(needle);
     }
 
     private void clampScroll() {
@@ -312,28 +411,36 @@ public class GuiIconPicker extends UiScreen {
      *
      * <p>
      * An effect is named by its unlocalized key, which is what gets stored; showing "potion.moveSpeed" where the
-     * game says "Speed" would make the player translate it themselves. Everything else is already an id they would
-     * recognise and might well want to copy into a profile by hand.
+     * game says "Speed" would make the player translate it themselves. An item gets both halves: the name it is
+     * known by, and the id and metadata someone writing a profile by hand would have to type. A sprite or a file is
+     * already the id it is stored under.
      */
-    private String hoverLabel(String name) {
-        return tab == Tab.EFFECTS ? I18n.format(name) : name;
+    private String hoverLabel(Entry entry) {
+        switch (tab) {
+            case ITEMS:
+                return entry.label + " (" + entry.id + (entry.meta != 0 ? "#" + entry.meta : "") + ")";
+            case EFFECTS:
+                return entry.label;
+            default:
+                return entry.id;
+        }
     }
 
     /** Builds the spec for an entry of the current tab, so drawing and picking cannot disagree about it. */
-    private IconSpec specFor(String name) {
+    private IconSpec specFor(Entry entry) {
         switch (tab) {
             case SPRITES:
-                return IconSpec.sprite(SpriteAtlas.qualify(name), color);
+                return IconSpec.sprite(SpriteAtlas.qualify(entry.id), color);
             case EFFECTS:
-                return IconSpec.effect(name);
+                return IconSpec.effect(entry.id);
             case FILES:
-                IconSpec file = IconSpec.file(name);
+                IconSpec file = IconSpec.file(entry.id);
                 // Null means untinted, which is how the artwork's own colours survive.
                 file.color = originalColors ? null : color;
                 return file;
             case ITEMS:
             default:
-                return IconSpec.item(name, 0);
+                return IconSpec.item(entry.id, entry.meta);
         }
     }
 
@@ -382,7 +489,7 @@ public class GuiIconPicker extends UiScreen {
         // The grid needs a ground of its own; against the bare panel the icons read as scattered rather than listed.
         Ui.list(gridLeft, gridTop, contentRight(), gridBottom());
 
-        String hoveredName = null;
+        Entry hovered = null;
         int rows = rowsVisible();
 
         for (int row = 0; row < rows; row++) {
@@ -396,7 +503,7 @@ public class GuiIconPicker extends UiScreen {
 
                 if (mouseX >= x && mouseX < x + CELL && mouseY >= y && mouseY < y + CELL) {
                     drawRect(x, y, x + CELL, y + CELL, Ui.ROW_HOVER);
-                    hoveredName = visible.get(index);
+                    hovered = visible.get(index);
                 }
                 IconRenderer.draw(specFor(visible.get(index)), x + 2, y + 2);
             }
@@ -412,10 +519,10 @@ public class GuiIconPicker extends UiScreen {
                 Ui.TEXT);
         }
 
-        if (hoveredName != null) {
+        if (hovered != null) {
             this.drawCenteredString(
                 this.fontRendererObj,
-                hoverLabel(hoveredName),
+                Ui.fit(hoverLabel(hovered), contentWidth()),
                 this.width / 2,
                 gridBottom() + Ui.GAP,
                 0xFFFFFF80);

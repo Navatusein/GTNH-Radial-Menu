@@ -32,12 +32,16 @@ final class SubmenuFields {
             layout.mode.name()
                 .toLowerCase());
         spec.set(ActionTypes.PARAM_SLOT_COUNT, Integer.toString(layout.slots));
-        spec.set(ActionTypes.PARAM_RING_COLOR, style == null || style.ringColor == null ? "" : style.ringColor);
-        spec.set(
-            ActionTypes.PARAM_HIGHLIGHT_COLOR,
-            style == null || style.highlightColor == null ? "" : style.highlightColor);
-        spec.set(ActionTypes.PARAM_BORDER_COLOR, style == null || style.borderColor == null ? "" : style.borderColor);
+        spec.set(ActionTypes.PARAM_RING_COLOR, orBlank(style == null ? null : style.ringColor));
+        spec.set(ActionTypes.PARAM_HIGHLIGHT_COLOR, orBlank(style == null ? null : style.highlightColor));
+        spec.set(ActionTypes.PARAM_BORDER_COLOR, orBlank(style == null ? null : style.borderColor));
+        spec.set(ActionTypes.PARAM_HIGHLIGHT_BORDER_COLOR, orBlank(style == null ? null : style.highlightBorderColor));
+        spec.set(ActionTypes.PARAM_BACKGROUND_COLOR, orBlank(style == null ? null : style.backgroundColor));
         return spec;
+    }
+
+    private static String orBlank(String value) {
+        return value == null ? "" : value;
     }
 
     /** Writes the edited spec back onto the node, turning it into a category if it was not one already. */
@@ -54,7 +58,9 @@ final class SubmenuFields {
             spec.getString(ActionTypes.PARAM_RING_COLOR, ""),
             spec.getString(ActionTypes.PARAM_HIGHLIGHT_COLOR, ""),
             null,
-            spec.getString(ActionTypes.PARAM_BORDER_COLOR, ""));
+            spec.getString(ActionTypes.PARAM_BORDER_COLOR, ""),
+            spec.getString(ActionTypes.PARAM_HIGHLIGHT_BORDER_COLOR, ""),
+            spec.getString(ActionTypes.PARAM_BACKGROUND_COLOR, ""));
 
         if (node.children == null) {
             node.children = new ArrayList<>();
