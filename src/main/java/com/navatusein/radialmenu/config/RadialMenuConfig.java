@@ -69,6 +69,13 @@ public class RadialMenuConfig {
     @Config.Order(10)
     public static String borderColor;
 
+    @Config.Comment("While an action holds an unbound keybinding down, lend it a key code no keyboard can produce. "
+        + "Some mods refuse to look at a binding whose key code is 0 - JourneyMap's zoom is one - so without this "
+        + "they cannot be driven from the menu at all. Turn it off if a mod misbehaves around it.")
+    @Config.DefaultBoolean(true)
+    @Config.Order(12)
+    public static boolean lendKeyCodeToUnbound;
+
     @Config.Comment("Thickness of those lines, in GUI pixels.")
     @Config.DefaultInt(1)
     @Config.RangeInt(min = 1, max = 6)

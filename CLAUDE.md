@@ -77,6 +77,13 @@ This is the crux, and it is verified against the decompiled 1.7.10 source, not a
   outside the loop and works fine. `VanillaKeyEffects` applies those two directly instead. A mod that polls
   `Keyboard.isKeyDown(kb.getKeyCode())` rather than its own binding object is likewise unreachable, permanently.
 
+**Some mods never look past the key code.** JourneyMap's `Constants.isPressed` returns false outright when
+`getKeyCode() == 0` and never reads the press counter, so its zoom and minimap keys were unreachable while its map
+toggle — which calls `isPressed()` directly — worked. `KeyInjector` lends an unbound binding `KEY_F15` for the
+length of the press: a code LWJGL defines that no keyboard produces, so the check passes and nothing can collide
+with it. The static `KeyBinding.hash` map is left alone, because the press is written to the binding directly rather
+than dispatched through the map. `lendKeyCodeToUnbound` turns it off if some mod's `KeyBinding` mixin objects.
+
 Mixin accessor names are **MCP** (`pressed`, `pressTime`); the refmap remaps them to SRG. Writing SRG names in source
 breaks the dev environment. Check `build/tmp/mixins/mixins.radialmenu.refmap.json` to confirm a mapping resolved.
 
@@ -106,14 +113,20 @@ own keeps it. Nothing renders during a tick, so no frame sees the substitution, 
 avoids `displayGuiScreen`'s `unPressAllKeys`, its `initGui`, and the cursor re-centring that would move the player's
 aim off the sector.
 
-**NEI's overlay keys are a different problem and cannot be fixed this way.** Checked against NEI 2.8.91-GTNH's
-sources: it registers *no* Forge keybindings at all — `grep registerKeyBinding` and `new KeyBinding(` both come back
-empty. Its binds live in its own config and `KeyManager.tickKeyStates` polls them with
-`Keyboard.isKeyDown(keyCode)`, so there is no `KeyBinding` object for the injector to press. That is the
-permanently-unreachable case above, and no amount of hiding the screen changes it. `WorldOverlayRenderer` *also*
-returns early while `currentScreen != null`, so both guards are real — but the polling one is decisive. Reaching
-mods like this would need a mixin on `Keyboard.isKeyDown` reporting a key code as held for a couple of ticks, which
-would fake the key for every reader in the game, not just the intended one.
+**Cover both moments a mod can read a key.** NEI reads its own bindings from a `ClientTickEvent` handler at phase
+**END**, so hiding the screen only for the length of the injection call — which happens at phase START — restores it
+before NEI ever looks. `WithoutScreen` therefore has a second window: armed for the one tick a press was made, a
+HIGHEST-priority END listener hides the screen and a LOWEST-priority one puts it back, so every other mod's END
+handler runs in between with a clear screen. `isPressed()` is a one-shot counter, so that tick is the only chance a
+tick-phase reader gets.
+
+**Check the version you are reading against the pack's.** `dependencies.gradle` pins NEI 2.8.91-GTNH, where the
+overlay keys really were polled with `Keyboard.isKeyDown` and no Forge keybinding existed. GTNH Daily 758 ships
+2.8.147-GTNH, which registers them properly — `nei.options.keys.world.chunkoverlay` appears in the picker and works.
+An analysis of "this mod cannot be driven at all" was drawn from the stale jar and was wrong.
+
+`java -p` on the pack's own jars is the way to settle these; the bug report that corrected this one carried the
+bytecode offsets.
 
 Two screen flags matter: `doesGuiPauseGame()` must return false, and `allowUserInput` must be set — 1.7.10 gates its
 entire keyboard/mouse block on `currentScreen == null || currentScreen.allowUserInput`, so without it the player

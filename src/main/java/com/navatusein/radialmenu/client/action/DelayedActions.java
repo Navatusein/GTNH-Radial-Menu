@@ -65,10 +65,14 @@ public final class DelayedActions {
         return !PENDING.isEmpty();
     }
 
-    /** Ages every entry by a tick and runs the ones that came due. */
-    public static void onClientTick() {
+    /**
+     * Ages every entry by a tick and runs the ones that came due.
+     *
+     * @return whether anything came due
+     */
+    public static boolean onClientTick() {
         if (PENDING.isEmpty()) {
-            return;
+            return false;
         }
         // Collected first, because running an entry may schedule or cancel others.
         List<Entry> due = new ArrayList<>();
@@ -88,5 +92,6 @@ public final class DelayedActions {
                 ActionExecutors.runNow(entry.spec);
             }
         }
+        return !due.isEmpty();
     }
 }

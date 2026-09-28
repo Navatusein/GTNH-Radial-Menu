@@ -312,11 +312,9 @@ Only which profile is active. The mod rewrites this on every switch, so edit it 
 - **An icon `color` of `null` and of `""` are different** — own colours versus inherit.
 - **Do not invent keybinding ids.** An unregistered one silently does nothing but log a warning.
 - **A profile name is its file name.** Rename both together.
-- **Some mods cannot be reached by a `keybind` action at all.** A mod whose keys are its own rather than Forge's,
-  polled straight from the keyboard, has no `KeyBinding` to press — NEI is the known case: its overlay toggles
-  (`world.chunkoverlay`, `world.moboverlay`) are read with `Keyboard.isKeyDown`, and it registers no Forge
-  keybindings whatsoever. Those ids will not appear in the keybinding picker, and writing one in by hand does
-  nothing. Use the picker: if it is not in the list, no `keybind` entry will work for it.
+- **If a binding is not in the picker, no `keybind` entry will work for it.** The picker lists every binding
+  registered with Forge, which is everything the injector can reach; a mod that keeps its keys to itself and polls
+  the keyboard directly has no binding to press. Writing such an id in by hand does nothing.
 
 ## Worked example
 

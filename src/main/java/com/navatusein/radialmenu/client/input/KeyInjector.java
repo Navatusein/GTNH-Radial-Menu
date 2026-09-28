@@ -1,10 +1,15 @@
 package com.navatusein.radialmenu.client.input;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+
 import net.minecraft.client.settings.KeyBinding;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
+import com.navatusein.radialmenu.config.RadialMenuConfig;
 import com.navatusein.radialmenu.mixins.early.KeyBindingAccessor;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -34,7 +39,47 @@ import cpw.mods.fml.common.gameevent.InputEvent;
  */
 public final class KeyInjector {
 
+    /**
+     * Key code lent to an unbound binding while an action holds it down.
+     *
+     * <p>
+     * F15 because LWJGL defines it and no keyboard in use has one, so nothing can press it by accident and nothing
+     * the player has bound can collide with it.
+     */
+    private static final int LENT_KEY_CODE = Keyboard.KEY_F15;
+
+    /** Bindings currently carrying the lent code, by identity - two bindings can compare equal and must not share. */
+    private static final Set<KeyBinding> LENT = Collections.newSetFromMap(new IdentityHashMap<KeyBinding, Boolean>());
+
     private KeyInjector() {}
+
+    /**
+     * Lends a key code to a binding that has none, for as long as the press lasts.
+     *
+     * <p>
+     * Some mods never look past the key code. JourneyMap's {@code Constants.isPressed} returns false outright when
+     * {@code getKeyCode() == 0} and never reads the press counter at all, so its zoom and minimap keys could not be
+     * driven from the menu however correctly they were pressed - while its map toggle, which calls
+     * {@code isPressed()} directly, worked fine. A code that exists but cannot be typed satisfies the check without
+     * giving the binding a key anyone could hit.
+     *
+     * <p>
+     * The static {@code KeyBinding.hash} map is deliberately left alone: it is keyed by the code registered at
+     * startup, and rebuilding it would be a far bigger intrusion than borrowing a field. Nothing needs it here,
+     * because the press is written to the binding directly rather than dispatched through the map.
+     */
+    private static void lendKeyCode(KeyBinding binding) {
+        if (RadialMenuConfig.lendKeyCodeToUnbound && binding.getKeyCode() == 0 && LENT.add(binding)) {
+            binding.setKeyCode(LENT_KEY_CODE);
+        }
+    }
+
+    /** Gives the code back, so the binding reads as unbound again everywhere the player might look at it. */
+    private static void returnKeyCode(KeyBinding binding) {
+        if (LENT.remove(binding)) {
+            binding.setKeyCode(0);
+        }
+    }
 
     private static KeyBindingAccessor access(KeyBinding binding) {
         return (KeyBindingAccessor) (Object) binding;
@@ -49,6 +94,7 @@ public final class KeyInjector {
      * a mod's flight toggle flickering on and off.
      */
     public static void press(KeyBinding binding) {
+        lendKeyCode(binding);
         KeyBindingAccessor accessor = access(binding);
         accessor.radialmenu$setPressed(true);
         accessor.radialmenu$setPressTime(accessor.radialmenu$getPressTime() + 1);
@@ -64,6 +110,7 @@ public final class KeyInjector {
         KeyBindingAccessor accessor = access(binding);
         accessor.radialmenu$setPressed(false);
         accessor.radialmenu$setPressTime(0);
+        returnKeyCode(binding);
     }
 
     public static boolean isHeld(KeyBinding binding) {

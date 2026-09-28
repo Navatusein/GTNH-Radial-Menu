@@ -39,12 +39,19 @@ public final class ActionExecutors {
         }
     }
 
-    /** Runs everything queued since the previous tick, then ages anything scheduled for later. */
-    public static void runPending() {
+    /**
+     * Runs everything queued since the previous tick, then ages anything scheduled for later.
+     *
+     * @return whether anything actually ran, which decides if a tick-phase reader has a press to find this tick
+     */
+    public static boolean runPending() {
+        boolean ran = false;
         while (!PENDING.isEmpty()) {
             runNow(PENDING.poll());
+            ran = true;
         }
-        DelayedActions.onClientTick();
+        ran |= DelayedActions.onClientTick();
+        return ran;
     }
 
     /**

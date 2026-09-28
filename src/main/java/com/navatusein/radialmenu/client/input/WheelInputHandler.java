@@ -4,11 +4,13 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 
 import com.navatusein.radialmenu.client.action.ActionExecutors;
+import com.navatusein.radialmenu.client.action.WithoutScreen;
 import com.navatusein.radialmenu.client.gui.GuiRadialWheel;
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.editor.GuiProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 
+import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
 import cpw.mods.fml.common.gameevent.TickEvent;
 
@@ -51,7 +53,11 @@ public class WheelInputHandler {
         }
 
         KeybindStateTracker.onClientTick();
-        ActionExecutors.runPending();
+        if (ActionExecutors.runPending() && WithoutScreen.wheelIsUp()) {
+            // A mod that reads its keys from a tick handler - NEI reads at END - would find a screen open and skip
+            // the press. isPressed() is a one-shot counter, so this tick is the only chance it has.
+            WithoutScreen.armTickEnd();
+        }
         GuiStack.openRequested();
 
         if (WheelKeyBindings.nextProfile.isPressed()) {
@@ -74,6 +80,28 @@ public class WheelInputHandler {
             } else {
                 releaseWheel(mc);
             }
+        }
+    }
+
+    /**
+     * Hides the wheel for the END phase, around every other mod's handler.
+     *
+     * <p>
+     * Two listeners rather than one, because the whole point is to be on both sides of everyone else: HIGHEST runs
+     * before the mods that read keys there, LOWEST after them. Nothing renders between the phases of one tick, so
+     * the substitution is never on screen.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onTickEndFirst(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) {
+            WithoutScreen.beginTickEnd();
+        }
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public void onTickEndLast(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.END) {
+            WithoutScreen.endTickEnd();
         }
     }
 
