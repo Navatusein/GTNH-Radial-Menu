@@ -65,6 +65,40 @@ public final class Colors {
         return (base & 0xFF000000) | (picked & 0x00FFFFFF);
     }
 
+    /**
+     * Scales an RGB colour's brightness by a percentage: below 100 towards black, above 100 towards white.
+     *
+     * <p>
+     * Darkening multiplies, which keeps the hue; lightening mixes towards white instead of multiplying, because
+     * multiplying a channel that is already 255 does nothing and a bright accent would refuse to get any lighter.
+     */
+    public static int scale(int rgb, int percent) {
+        if (percent == 100) {
+            return rgb & 0x00FFFFFF;
+        }
+        int red = (rgb >> 16) & 0xFF;
+        int green = (rgb >> 8) & 0xFF;
+        int blue = rgb & 0xFF;
+
+        if (percent < 100) {
+            float factor = Math.max(0, percent) / 100f;
+            red = Math.round(red * factor);
+            green = Math.round(green * factor);
+            blue = Math.round(blue * factor);
+        } else {
+            float towardsWhite = Math.min(100, percent - 100) / 100f;
+            red = Math.round(red + (255 - red) * towardsWhite);
+            green = Math.round(green + (255 - green) * towardsWhite);
+            blue = Math.round(blue + (255 - blue) * towardsWhite);
+        }
+        return (red << 16) | (green << 8) | blue;
+    }
+
+    /** Puts an alpha channel on an RGB colour, replacing whatever it had. */
+    public static int withAlpha(int rgb, int alpha) {
+        return ((Math.max(0, Math.min(255, alpha))) << 24) | (rgb & 0x00FFFFFF);
+    }
+
     private static String digits(String value) {
         if (value == null) {
             return "";
