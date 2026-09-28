@@ -98,13 +98,22 @@ breaks whenever the receiving handler opens a GUI of its own (AdventureBackpack2
 restoring `currentScreen` afterwards clobbers it. Closing first also genuinely restores `inGameHasFocus`, which
 AdventureBackpack2 checks before reacting at all.
 
-**`keepOpen` costs you every mod that checks `currentScreen`.** An entry with `keepOpen` leaves the wheel up, so
-step 3's close never happens and the injection lands while a screen is open. NEI only acts on its own keys
-(`world.chunkoverlay`, `world.moboverlay`) when no screen is open, so such an entry does nothing at all — and
-nothing is logged, because the injection genuinely succeeded and it is the *receiver* that declined. Found on a real
-pack 2026-09-28; the fix was to drop `keepOpen` from those entries. **First thing to try when a `keepOpen` entry is
-silent is turning `keepOpen` off.** Reopening the wheel after the action would need to check `currentScreen == null`
-first, or it would clobber a GUI the receiving mod had just opened.
+**`keepOpen` used to cost you every mod that checks `currentScreen` or `inGameHasFocus`.** Such an entry leaves the
+wheel up, so step 3's close never happens and the injection lands while a screen is open — and AdventureBackpack2,
+for one, checks focus before reacting at all. `WithoutScreen` now clears both flags for the length of the call and
+puts them back **only if the screen is still clear**, which is what makes it safe: a handler that opened a GUI of its
+own keeps it. Nothing renders during a tick, so no frame sees the substitution, and writing the fields directly
+avoids `displayGuiScreen`'s `unPressAllKeys`, its `initGui`, and the cursor re-centring that would move the player's
+aim off the sector.
+
+**NEI's overlay keys are a different problem and cannot be fixed this way.** Checked against NEI 2.8.91-GTNH's
+sources: it registers *no* Forge keybindings at all — `grep registerKeyBinding` and `new KeyBinding(` both come back
+empty. Its binds live in its own config and `KeyManager.tickKeyStates` polls them with
+`Keyboard.isKeyDown(keyCode)`, so there is no `KeyBinding` object for the injector to press. That is the
+permanently-unreachable case above, and no amount of hiding the screen changes it. `WorldOverlayRenderer` *also*
+returns early while `currentScreen != null`, so both guards are real — but the polling one is decisive. Reaching
+mods like this would need a mixin on `Keyboard.isKeyDown` reporting a key code as held for a couple of ticks, which
+would fake the key for every reader in the game, not just the intended one.
 
 Two screen flags matter: `doesGuiPauseGame()` must return false, and `allowUserInput` must be set — 1.7.10 gates its
 entire keyboard/mouse block on `currentScreen == null || currentScreen.allowUserInput`, so without it the player

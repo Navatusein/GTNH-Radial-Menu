@@ -69,7 +69,7 @@ One object type covers both an entry and a submenu.
 |---|---|---|
 | `title` | string | Shown in the middle of the wheel while the entry is hovered, and in the header when you are inside a submenu. |
 | `icon` | object | See [Icons](#icons). Omit for no icon. |
-| `keepOpen` | bool | `true` leaves the wheel open after the entry fires, so it can be triggered repeatedly. Default `false`. **Breaks any action whose receiver requires no open screen** — see below. |
+| `keepOpen` | bool | `true` leaves the wheel open after the entry fires, so it can be triggered repeatedly. Default `false`. |
 | `action` | object | What the entry does. Makes the node an **entry**. |
 | `children` | array | Makes the node a **submenu** — its own wheel. |
 | `layout` | object | Sector layout of this node's children wheel. Submenus only. |
@@ -312,10 +312,11 @@ Only which profile is active. The mod rewrites this on every switch, so edit it 
 - **An icon `color` of `null` and of `""` are different** — own colours versus inherit.
 - **Do not invent keybinding ids.** An unregistered one silently does nothing but log a warning.
 - **A profile name is its file name.** Rename both together.
-- **`keepOpen` can stop a `keybind` entry working at all.** Leaving the wheel open means a screen is open, and a mod
-  that only reacts to its keys when none is — NEI's overlay toggles, `world.chunkoverlay` and `world.moboverlay`,
-  are the known case — will ignore the press. Nothing is logged: the key really was pressed, the receiver simply
-  declined. If a `keepOpen` entry does nothing, set `keepOpen` to `false` first, before suspecting the binding id.
+- **Some mods cannot be reached by a `keybind` action at all.** A mod whose keys are its own rather than Forge's,
+  polled straight from the keyboard, has no `KeyBinding` to press — NEI is the known case: its overlay toggles
+  (`world.chunkoverlay`, `world.moboverlay`) are read with `Keyboard.isKeyDown`, and it registers no Forge
+  keybindings whatsoever. Those ids will not appear in the keybinding picker, and writing one in by hand does
+  nothing. Use the picker: if it is not in the list, no `keybind` entry will work for it.
 
 ## Worked example
 
