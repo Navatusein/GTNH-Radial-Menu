@@ -29,7 +29,11 @@ public class WheelInputHandler {
     /** Auto-binding runs once per world, on the first tick where a player exists. */
     private boolean autoBindApplied;
 
-    @SubscribeEvent
+    /**
+     * Runs at {@code LOWEST} so it comes after {@link WithoutScreen#endTick}, and so the screen is its real self
+     * again by the time this opens or closes the wheel.
+     */
+    @SubscribeEvent(priority = EventPriority.LOWEST)
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.START) {
             return;
@@ -54,9 +58,10 @@ public class WheelInputHandler {
 
         KeybindStateTracker.onClientTick();
         if (ActionExecutors.runPending() && WithoutScreen.wheelIsUp()) {
-            // A mod that reads its keys from a tick handler - NEI reads at END - would find a screen open and skip
-            // the press. isPressed() is a one-shot counter, so this tick is the only chance it has.
-            WithoutScreen.armTickEnd();
+            // A mod reading its keys from a tick handler would find a screen open and skip the press. NEI reads at
+            // phase START, before this listener, so the wheel has to be hidden on the tick after the press - which
+            // is fine, because isPressed() is a counter that waits until something takes it.
+            WithoutScreen.armNextTick();
         }
         GuiStack.openRequested();
 
@@ -84,25 +89,21 @@ public class WheelInputHandler {
     }
 
     /**
-     * Hides the wheel for the END phase, around every other mod's handler.
+     * Hides the wheel around every other mod's tick handler.
      *
      * <p>
-     * Two listeners rather than one, because the whole point is to be on both sides of everyone else: HIGHEST runs
-     * before the mods that read keys there, LOWEST after them. Nothing renders between the phases of one tick, so
-     * the substitution is never on screen.
+     * Two listeners, on either side of the ordinary ones: HIGH before the mods that read keys there, LOW after them.
+     * Phase START is where it matters - NEI's handler returns immediately on END - but both are wrapped, because a
+     * mod is free to read in either and the cost of covering both is one boolean.
      */
-    @SubscribeEvent(priority = EventPriority.HIGHEST)
-    public void onTickEndFirst(TickEvent.ClientTickEvent event) {
-        if (event.phase == TickEvent.Phase.END) {
-            WithoutScreen.beginTickEnd();
-        }
+    @SubscribeEvent(priority = EventPriority.HIGH)
+    public void onTickFirst(TickEvent.ClientTickEvent event) {
+        WithoutScreen.beginTick();
     }
 
-    @SubscribeEvent(priority = EventPriority.LOWEST)
-    public void onTickEndLast(TickEvent.ClientTickEvent event) {
-        if (event.phase == TickEvent.Phase.END) {
-            WithoutScreen.endTickEnd();
-        }
+    @SubscribeEvent(priority = EventPriority.LOW)
+    public void onTickLast(TickEvent.ClientTickEvent event) {
+        WithoutScreen.endTick(event.phase == TickEvent.Phase.START);
     }
 
     /**

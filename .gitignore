@@ -38,3 +38,6 @@ layout.json
 
 # Icon atlas generator: run manually, its output is committed instead.
 /tools/
+
+# Third-party jars copied in from a pack for testing, not ours to ship.
+/libs/

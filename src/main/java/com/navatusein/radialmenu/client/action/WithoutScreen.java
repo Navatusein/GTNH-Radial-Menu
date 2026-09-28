@@ -17,17 +17,23 @@ import com.navatusein.radialmenu.core.action.ActionSpec;
  * genuinely succeeded; the receiver declined.
  *
  * <p>
- * There are two moments to cover, because mods read a key in two places:
+ * Two moments are covered, because a mod can read a key in two places:
  * <ul>
  * <li>Inside the {@code KeyInputEvent} posted during the injection - {@link #runAction}.</li>
- * <li>In their own {@code ClientTickEvent} handler at phase END, which is where NEI reads - {@link #beginTickEnd} and
- * {@link #endTickEnd}, armed for the one tick a press was made.</li>
+ * <li>In its own {@code ClientTickEvent} handler, which is where NEI reads - {@link #beginTick} and {@link #endTick},
+ * wrapped around the tick after a press was made.</li>
  * </ul>
+ *
+ * <p>
+ * The tick handlers sit at {@code HIGH} and {@code LOW} so an ordinary {@code NORMAL} handler runs between them, and
+ * the mod's own listener is at {@code LOWEST} so it runs after the screen is back. NEI does its work at phase
+ * <b>START</b> - its handler returns immediately on END - and that detail is the whole fix: wrapping the END phase
+ * instead, which is what a first reading suggested, put the screen back long before NEI ever looked.
  *
  * <p>
  * The fields are written directly rather than through {@code displayGuiScreen}, which would unpress every binding,
  * re-run {@code initGui}, and grab and release the mouse - re-centring the cursor, which on this screen is the
- * player's aim. Nothing renders between the two phases of one tick, so no frame ever sees the substitution.
+ * player's aim. Nothing renders inside a tick phase, so no frame ever sees the substitution.
  *
  * <p>
  * <b>The restore is conditional, and that is the whole trick.</b> A handler may open a GUI of its own -
@@ -40,8 +46,14 @@ public final class WithoutScreen {
 
     private WithoutScreen() {}
 
-    /** Set while the END phase of this tick should run as though no screen were open. */
-    private static boolean veilTickEnd;
+    /**
+     * Set when a press was made while the wheel was up, so the next tick runs with the wheel hidden.
+     *
+     * <p>
+     * The next tick, not this one: a press made in the mod's own listener has already missed the readers that ran
+     * earlier in the same phase, and {@code isPressed()} is a counter that survives until something takes it.
+     */
+    private static boolean armed;
 
     private static GuiScreen hiddenScreen;
     private static boolean hiddenFocus;
@@ -77,26 +89,19 @@ public final class WithoutScreen {
         }
     }
 
-    /**
-     * Asks for this tick's END phase to run with the wheel hidden.
-     *
-     * <p>
-     * Armed only for the tick a press was actually made. {@code isPressed()} is a one-shot counter, so that is the
-     * only tick a tick-phase reader can consume it in, and holding the lie open for longer would show every other
-     * mod's END handler a world with no screen in it for no reason.
-     */
-    public static void armTickEnd() {
-        veilTickEnd = true;
+    /** Asks for the next tick to run with the wheel hidden. */
+    public static void armNextTick() {
+        armed = true;
     }
 
-    /** Called at END phase before any other mod's handler. */
-    public static void beginTickEnd() {
-        if (!veilTickEnd) {
+    /** Called at the start of a tick phase, before any ordinary handler. */
+    public static void beginTick() {
+        if (!armed || hiddenScreen != null) {
             return;
         }
         Minecraft mc = Minecraft.getMinecraft();
         if (!(mc.currentScreen instanceof GuiRadialWheel)) {
-            veilTickEnd = false;
+            armed = false;
             return;
         }
         hiddenScreen = mc.currentScreen;
@@ -105,14 +110,19 @@ public final class WithoutScreen {
         mc.inGameHasFocus = true;
     }
 
-    /** Called at END phase after every other mod's handler. */
-    public static void endTickEnd() {
-        if (!veilTickEnd) {
-            return;
-        }
-        veilTickEnd = false;
+    /**
+     * Called after every ordinary handler has had its turn.
+     *
+     * @param startPhase whether this was phase START, which is the one that has to happen before the arming is
+     *                   spent - the END phase of the same tick comes first, and clearing it there would leave the
+     *                   wheel in plain sight for the reader that actually matters
+     */
+    public static void endTick(boolean startPhase) {
         if (hiddenScreen == null) {
             return;
+        }
+        if (startPhase) {
+            armed = false;
         }
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.currentScreen == null) {
