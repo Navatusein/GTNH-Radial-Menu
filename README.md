@@ -101,6 +101,13 @@ below the tabs are whatever that action needs, so the screen has nothing on it t
 
 ![Slot editor](/docs/assets/slot-editor.png)
 
+Two of the five carry more than a field or two. A submenu is a wheel of its own — its slot count, its layout and its
+colours are the slot's settings — and a chain is a list of steps, each one an action in its own right.
+
+| Submenu | Chain |
+|---|---|
+| ![Submenu settings](/docs/assets/slot-editor-submenu.png) | ![Chain steps](/docs/assets/slot-editor-chain.png) |
+
 #### Layout
 
 A menu is either **fixed** or **dynamic**. Fixed keeps every entry at the same angle whatever its neighbours do,
@@ -175,13 +182,23 @@ repainting everything else.
 Rather than picking six colours by hand, pick one **accent**: the editor fills the rest in from it, using the
 proportions in the Accent category. What it writes are ordinary colours, yours to adjust one at a time afterwards.
 
+![Profile colors](/docs/assets/profiles-color.png)
+
 #### The wheel itself
 
 Sector gap, line thickness, the soft edge and the plate behind each icon are all in the Wheel category.
 
 | Icons on their own | Icons on inventory slots |
 |---|---|
-| ![Plain wheel](/docs/assets/wheel-plain.png) | ![Wheel with plates](/docs/assets/wheel.png) |
+| ![No slot plates](/docs/assets/wheel-no-gap.png) | ![Slot plates behind the icons](/docs/assets/wheel-hotbar-mode.png) |
+
+| A two pixel gap | A five pixel gap |
+|---|---|
+| ![Small sector gap](/docs/assets/wheel-small-gap.png) | ![Large sector gap](/docs/assets/wheel-large-gap.png) |
+
+| With the outline drawn | Outline, plates and an accent colour |
+|---|---|
+| ![Outlined wheel](/docs/assets/wheel-bordered.png) | ![Outlined wheel in green, with slot plates](/docs/assets/wheel-bordered-hotbar-color.png) |
 
 <a id="development"></a>
 
