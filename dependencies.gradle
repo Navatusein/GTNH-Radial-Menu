@@ -43,10 +43,16 @@ dependencies {
     // anything about them. Reading the wrong jar is how one bug report got diagnosed backwards.
     runtimeOnlyNonPublishable("com.github.GTNewHorizons:NotEnoughItems:2.8.147-GTNH:dev")
 
-    // Not on any maven we can reach, so it is copied out of the pack into libs/ (gitignored - it is somebody
-    // else's jar). Deobfuscated on the way in, because a production jar is SRG-named and the dev client is not.
-    // Here to reproduce the zoom keys, which JourneyMap refuses to read while their key code is 0.
-    runtimeOnlyNonPublishable(rfg.deobf(files("libs/journeymap-1.7.10-5.2.33-unlimited.jar")))
+    // Mods copied out of the pack to test the key injection against - JourneyMap, for the zoom keys it refuses to
+    // read while their key code is 0, and whatever else is being chased that week. Not on any maven we can reach.
+    // Deobfuscated on the way in, because a production jar is SRG-named and the dev client is not.
+    //
+    // Taken by the folderful rather than named: libs/ is gitignored, those jars being somebody else's, so CI checks
+    // out a tree that has none of them. Naming one outright failed the build there before it compiled a line.
+    // Dropping a jar into the folder is the whole installation step.
+    fileTree(dir: "libs", include: "*.jar").each { jar ->
+        runtimeOnlyNonPublishable(rfg.deobf(files(jar)))
+    }
 
     testImplementation("junit:junit:4.13.2")
 }
