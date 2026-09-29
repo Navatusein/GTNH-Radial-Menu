@@ -216,10 +216,3 @@ The build needs JDK 25 and uses the GTNewHorizons
 
 The jar for the game is `build/libs/radialmenu-<version>.jar` — not the `-dev` one, which is built against
 development mappings.
-
-`src/main/java/com/navatusein/radialmenu/core/` holds the menu tree, the profiles, the action data, the JSON codec
-and the angle maths, and imports nothing from Minecraft. It is unit tested on its own:
-
-```shell
-grep -r "net.minecraft" src/main/java/com/navatusein/radialmenu/core/   # must be empty
-```
