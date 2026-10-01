@@ -3,13 +3,18 @@ package com.navatusein.radialmenu.client.gui.editor;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
 
+import org.lwjgl.input.Keyboard;
+
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
 import com.navatusein.radialmenu.client.gui.ui.UiColorButton;
+import com.navatusein.radialmenu.client.gui.ui.UiDragReorder;
+import com.navatusein.radialmenu.client.gui.ui.UiIconButton;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.icon.IconRenderer;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
@@ -82,6 +87,18 @@ public class GuiMenuSettings extends UiScreen {
     /** Where each drawn row sits, so the icon and title can be drawn with the content rather than over a button. */
     private final List<int[]> rowPositions = new ArrayList<>();
     private final List<MenuNode> rowNodes = new ArrayList<>();
+
+    /**
+     * Which entry of {@link #workingChildren} each drawn row is.
+     *
+     * <p>
+     * Not the same number: a fixed wheel keeps its empty slots in the list and they are not drawn, so the fourth row on
+     * screen can be the sixth entry. The arrows have always worked in list positions; dragging works in rows, and this
+     * is where the two meet.
+     */
+    private final List<Integer> rowIndices = new ArrayList<>();
+
+    private final UiDragReorder drag = new UiDragReorder();
 
     private int generalSectionTop;
     private int entriesSectionTop;
@@ -164,16 +181,18 @@ public class GuiMenuSettings extends UiScreen {
                 inputs.add(null);
 
                 if (FieldControls.hasClear(field)) {
-                    GuiButton clear = new GuiButton(
+                    GuiButton clear = new UiIconButton(
                         ID_CLEAR_BASE + index,
                         controlLeft + mainWidth + Ui.GAP,
                         y,
                         FieldControls.CLEAR_WIDTH,
                         Ui.ROW,
-                        "x");
-                    clear.enabled = editable && current != null
-                        && !current.trim()
-                            .isEmpty();
+                        UiIconButton.Icon.CROSS);
+                    // Clearing is not gated on editable: the colour is still stored while that part of the wheel is
+                    // off,
+                    // and dropping it is how the row goes back to inheriting.
+                    clear.enabled = current != null && !current.trim()
+                        .isEmpty();
                     this.buttonList.add(clear);
                     tooltip(ID_CLEAR_BASE + index, describe("radialmenu.profileColors.clear.tip"));
                 }
@@ -209,6 +228,7 @@ public class GuiMenuSettings extends UiScreen {
 
         rowPositions.clear();
         rowNodes.clear();
+        rowIndices.clear();
 
         for (int i = 0; i < workingChildren.size(); i++) {
             MenuNode child = workingChildren.get(i);
@@ -216,8 +236,20 @@ public class GuiMenuSettings extends UiScreen {
                 continue;
             }
 
-            GuiButton up = new GuiButton(ID_UP_BASE + i, contentRight() - ARROW * 2 - 2, y, ARROW, Ui.ROW, "^");
-            GuiButton down = new GuiButton(ID_DOWN_BASE + i, contentRight() - ARROW, y, ARROW, Ui.ROW, "v");
+            GuiButton up = new UiIconButton(
+                ID_UP_BASE + i,
+                contentRight() - ARROW * 2 - 2,
+                y,
+                ARROW,
+                Ui.ROW,
+                UiIconButton.Icon.UP);
+            GuiButton down = new UiIconButton(
+                ID_DOWN_BASE + i,
+                contentRight() - ARROW,
+                y,
+                ARROW,
+                Ui.ROW,
+                UiIconButton.Icon.DOWN);
             up.enabled = canMove(i, -1);
             down.enabled = canMove(i, 1);
             this.buttonList.add(up);
@@ -225,6 +257,7 @@ public class GuiMenuSettings extends UiScreen {
 
             rowPositions.add(new int[] { left, y });
             rowNodes.add(child);
+            rowIndices.add(Integer.valueOf(i));
             y += Ui.STEP;
         }
 
@@ -443,23 +476,121 @@ public class GuiMenuSettings extends UiScreen {
                 continue;
             }
             MenuNode child = rowNodes.get(i);
+            int iconLeft = position[0] + UiDragReorder.GRIP + 2;
+
+            if (drag.isDragging() && drag.grabbedRow() == i) {
+                // The row being carried, marked where it came from: without it, a drag of one row in a list of
+                // identical-looking rows gives no clue what is moving.
+                Gui.drawRect(position[0], position[1], contentRight(), position[1] + Ui.ROW, Ui.ROW_SELECTED);
+            }
+            UiDragReorder.drawGrip(position[0], position[1], Ui.ROW, drag.isDragging() && drag.grabbedRow() == i);
 
             // Drawn here, with the content, rather than over the arrows - an item rendered after a button comes out
             // unlit.
-            IconRenderer.draw(child.icon, position[0] + 2, position[1] + 2);
+            IconRenderer.draw(child.icon, iconLeft, position[1] + 2);
 
             String title = child.title == null || child.title.isEmpty() ? I18n.format("radialmenu.menu.untitled")
                 : child.title;
             this.fontRendererObj.drawString(
-                Ui.fit(title, contentWidth() - ARROW * 2 - 28),
-                position[0] + 22,
+                Ui.fit(title, contentWidth() - ARROW * 2 - 28 - UiDragReorder.GRIP),
+                iconLeft + 20,
                 position[1] + (Ui.ROW - 8) / 2,
                 Ui.TEXT);
         }
+
+        drag.drawInsertion(rows(), contentLeft(), contentRight());
+        scrollTowardsDrag();
+    }
+
+    /**
+     * Scrolls the list while a row is held past its edge.
+     *
+     * <p>
+     * Without it a list longer than the panel can only be reordered as far as the screen reaches, and the player has to
+     * drop the row, scroll, and pick it up again - which is the arrows with extra steps.
+     */
+    private void scrollTowardsDrag() {
+        if (!drag.isDragging()) {
+            return;
+        }
+        int overshoot = drag.overshoot(rows());
+        if (overshoot == 0) {
+            return;
+        }
+        int step = Math.max(-6, Math.min(6, overshoot));
+        int next = Math.max(0, Math.min(maxScroll(), scrollOffset + step));
+        if (next != scrollOffset) {
+            beforeScroll();
+            scrollOffset = next;
+            requestRebuild();
+        }
+    }
+
+    /** Where the entry rows are, for the drag gesture. */
+    private UiDragReorder.Rows rows() {
+        return new UiDragReorder.Rows() {
+
+            @Override
+            public int count() {
+                return rowPositions.size();
+            }
+
+            @Override
+            public int top(int row) {
+                return rowPositions.get(row)[1];
+            }
+
+            @Override
+            public int height() {
+                return Ui.ROW;
+            }
+        };
+    }
+
+    /**
+     * Moves a drawn row to where it was dropped, one step at a time.
+     *
+     * <p>
+     * Through {@link MenuNode#moveInList} rather than by cutting and inserting, so a drag is exactly what pressing the
+     * arrow that many times would do - including walking an entry through the empty slots of a fixed wheel, where an
+     * insertion would instead shift every entry after it onto a different sector.
+     */
+    private void moveRow(int from, int to) {
+        if (from < 0 || to < 0 || from == to || from >= rowIndices.size() || to >= rowIndices.size()) {
+            return;
+        }
+
+        int direction = to > from ? 1 : -1;
+        int index = rowIndices.get(from)
+            .intValue();
+        int steps = 0;
+        int cap = workingChildren.size() * 2;
+
+        while (rowOf(index) != to && steps++ < cap) {
+            if (!MenuNode.moveInList(workingChildren, index, direction, isFixedLayout())) {
+                break;
+            }
+            index = workingChildren.indexOf(rowNodes.get(from));
+        }
+    }
+
+    /** Which drawn row a list position is, counting only the entries that are drawn. */
+    private int rowOf(int index) {
+        int row = 0;
+        for (int i = 0; i < index && i < workingChildren.size(); i++) {
+            if (workingChildren.get(i) != null) {
+                row++;
+            }
+        }
+        return row;
     }
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int button) {
+        // Before super, and the whole point of the grip: a press that lands on one must not reach a button at all.
+        if (button == 0 && isInsideViewport(mouseY) && drag.press(mouseX, mouseY, contentLeft(), rows())) {
+            return;
+        }
         super.mouseClicked(mouseX, mouseY, button);
         // A field clipped at the panel edge still answers to clicks on the part that was cut away.
         if (!isInsideViewport(mouseY)) {
@@ -474,7 +605,32 @@ public class GuiMenuSettings extends UiScreen {
     }
 
     @Override
+    protected void mouseClickMove(int mouseX, int mouseY, int mouseButton, long timeSinceClick) {
+        drag.moveTo(mouseY);
+        super.mouseClickMove(mouseX, mouseY, mouseButton, timeSinceClick);
+    }
+
+    @Override
+    protected void mouseMovedOrUp(int mouseX, int mouseY, int which) {
+        if (which == 0) {
+            int from = drag.grabbedRow();
+            int to = drag.release(rows());
+            if (to >= 0 && to != from) {
+                capture();
+                moveRow(from, to);
+                requestRebuild();
+            }
+        }
+        super.mouseMovedOrUp(mouseX, mouseY, which);
+    }
+
+    @Override
     protected boolean handleKey(char typedChar, int keyCode) {
+        if (keyCode == Keyboard.KEY_ESCAPE && drag.isDragging()) {
+            // Escape puts a half-made drag back rather than leaving the screen with it still held.
+            drag.cancel();
+            return true;
+        }
         if (titleField.textboxKeyTyped(typedChar, keyCode)) {
             return true;
         }

@@ -73,6 +73,77 @@ public class IconSpec {
         return icon;
     }
 
+    /**
+     * Reads the one-string form: {@code minecraft:stone}, {@code minecraft:wool:5}, {@code sprite:phosphor:house},
+     * {@code file:backpack.png}, {@code effect:potion.moveSpeed}.
+     *
+     * <p>
+     * No prefix means an item, because that is what most icons are and because a script builds those names out of
+     * whatever it parsed. The metadata is read from the <b>end</b> rather than after the second colon: a registry name
+     * already contains one, so {@code gregtech:gt.metaitem.01:32000} has to keep its own.
+     *
+     * <p>
+     * Returns null for anything blank and never throws. An icon is decoration - a name a script got wrong should cost
+     * the slot its picture, not stop the menu from opening.
+     */
+    public static IconSpec parse(String text) {
+        if (text == null) {
+            return null;
+        }
+        String value = text.trim();
+        if (value.isEmpty()) {
+            return null;
+        }
+
+        if (hasPrefix(value, "sprite")) {
+            return afterPrefix(value).isEmpty() ? null : sprite(afterPrefix(value), null);
+        }
+        if (hasPrefix(value, "file")) {
+            return afterPrefix(value).isEmpty() ? null : file(afterPrefix(value));
+        }
+        if (hasPrefix(value, "effect")) {
+            return afterPrefix(value).isEmpty() ? null : effect(afterPrefix(value));
+        }
+        if (hasPrefix(value, "item")) {
+            value = afterPrefix(value);
+            if (value.isEmpty()) {
+                return null;
+            }
+        }
+
+        int split = value.lastIndexOf(':');
+        if (split > 0 && split < value.length() - 1) {
+            String tail = value.substring(split + 1);
+            if (isDigits(tail)) {
+                try {
+                    return item(value.substring(0, split), Integer.parseInt(tail));
+                } catch (NumberFormatException ignored) {
+                    // Digits that overflow an int. The whole string stays a registry name, which at worst draws
+                    // nothing - guessing at a truncated metadata value would draw the wrong item instead.
+                }
+            }
+        }
+        return item(value, 0);
+    }
+
+    private static boolean hasPrefix(String value, String prefix) {
+        return value.regionMatches(true, 0, prefix + ":", 0, prefix.length() + 1);
+    }
+
+    private static String afterPrefix(String value) {
+        return value.substring(value.indexOf(':') + 1)
+            .trim();
+    }
+
+    private static boolean isDigits(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            if (text.charAt(i) < '0' || text.charAt(i) > '9') {
+                return false;
+            }
+        }
+        return !text.isEmpty();
+    }
+
     public IconSpec copy() {
         IconSpec copy = new IconSpec();
         copy.kind = kind;

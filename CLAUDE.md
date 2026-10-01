@@ -24,6 +24,12 @@ Client-only by design: no packets, no server component, works on unmodified serv
 ./gradlew test --tests '*RadialGeometryTest.deadZoneSelectsNothing'
 ```
 
+**Never build while a dev client is running.** The client loads classes lazily straight out of `build/classes`, so a
+rebuild underneath it replaces files it has not read yet. The next screen that touches an unloaded class dies with
+`NoClassDefFoundError` - caused by a `ClassNotFoundException`, caused by a bare `NullPointerException` inside
+`LaunchClassLoader`, which is the signature of this and not of a bug in the class. It cost one crash report that read
+like a broken accent colour and was a `spotlessApply` thirty-eight seconds earlier. Close the client, build, relaunch.
+
 **Toolchain gotcha**: the build needs JDK 25. Gradle's auto-provisioning is broken here — foojay serves a JDK **21**
 archive for a 25 request and Gradle rejects it. A real JDK 25 lives at `D:\tools\jdk25` and is registered in
 `~/.gradle/gradle.properties` via `org.gradle.java.installations.paths` (forward slashes — backslashes are escapes in
@@ -312,6 +318,45 @@ sector, or whatever the wheel was turned to — while `pointerSlot` is always th
 the dead zone in the middle is the only way into a menu's own settings, and a selection driven by the scroll wheel
 never sits in it.
 
+## Scripts
+
+`docs/SCRIPTING.md` is the contract a script is written against. This is what holds it up.
+
+**A script never touches the game.** `core/script/` has no Minecraft in it and only asks: a `ScriptRequest` comes out,
+the host performs it and resumes. That is not tidiness - LuaJ runs a coroutine on a Java thread of its own, so anything
+the script called directly would run off the client thread. It is also what lets the whole of the `/home` case be a unit
+test with no game anywhere near it.
+
+**Two of the documented functions live in Lua on purpose.** `chat.await` and the public `menu.open` are in
+`assets/radialmenu/scripts/prelude.lua`, because they handle values Java has no business holding: a Lua pattern, which
+only `string.match` should interpret, and an item table carrying the author's own fields and callbacks. What crosses the
+line is a chat line, a projected list of labels, and an index back - which is why `onPick` costs the host nothing and
+may itself wait, and why `menu.open` can return a key while the host only ever counts positions.
+
+**The host is asked for the next chat line, not for a match.** Putting the matching on the Java side would mean a second
+implementation of Lua patterns, drifting from the one the script can see.
+
+**A closed wheel is not yet a dismissal.** Choosing an entry closes the wheel and queues the `scriptResume` for the next
+tick, so the screen is gone *before* the answer arrives. `ScriptHost.onClientTick` therefore runs after
+`ActionExecutors.runPending()` and looks for a pending choice before reading the closure as "the player let go". The
+other order turns every choice into a cancel.
+
+**The chat listener is on the wrong thread.** 1.7.10 has no `IThreadListener`, so `ClientChatReceivedEvent` arrives on
+Netty's worker thread. `ChatCapture` only queues the text and the tick drains it. Lines are kept by index rather than
+consumed, because several runs may be waiting at once and each needs the stream from where it started - which also means
+a reply that lands before the script gets round to asking is still there.
+
+**Every standard library registers itself in `package.loaded`**, so globals without one fail inside `TableLib` before a
+line of script runs. `PackageLib` is precisely what must not be there - it brings `require` and a searcher that loads
+arbitrary Java classes - so `ScriptSandbox` puts an empty table there and takes it away afterwards. `DebugLib` is loaded
+for the opposite reason: the interpreter only honours an instruction hook when `globals.debuglib` is set, and that hook
+is the whole watchdog. It is written straight onto `thread.state.hookfunc` and the `debug` table removed, so a script
+cannot take the hook off itself.
+
+**The watchdog throws from inside the hook**, because the host is blocked in `resume` while the script runs and cannot
+interrupt from outside. The budget is per resume rather than per script: a resume happens on the client tick, so a
+script that waits two minutes costs nothing and one that spends a tenth of a second in a stretch of Lua is a stutter.
+
 ## Profiles
 
 Menus live in `<game folder>/RadialMenu/`, not `config/` — one file per profile under `profiles/`, plus
@@ -332,7 +377,8 @@ handles enum casing instead.
 
 Working: template setup, mixin accessor, `core/` + 114 tests, profiles with auto-bind, wheel rendering and
 lifecycle, keybind action (tap/toggle/hold), profile-switch action, command action with placeholders, action chains,
-submenu-as-action-type with per-menu layout and colours, entry reordering, the full editor, and `/radialmenu`.
+submenu-as-action-type with per-menu layout and colours, entry reordering, the full editor, `/radialmenu`, and the
+Lua script action with menus it builds at run time.
 
 The wheel's look is settled: six colours down the config → profile → menu chain, an accent that fills them in, a
 linear sector gap, a one-pixel soft edge, an outline the highlighted sector gets to itself, an optional wash behind

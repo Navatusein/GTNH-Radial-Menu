@@ -171,3 +171,16 @@ radialmenu.action.submenu.backgroundColor=Background
 radialmenu.action.submenu.backgroundColor.tip=Wash over the screen behind this submenu. Leave it inherited to use the profile's color.
 radialmenu.editor.pickAccent=Fill in from a color...
 radialmenu.editor.colorOff.tip=Not drawn: %s is off in the Wheel config. The color is kept - an accent still fills it in.
+
+radialmenu.action.script=Script
+radialmenu.action.script.source=Lua
+radialmenu.action.script.timeoutTicks=Timeout (ticks)
+radialmenu.action.script.tip=Run a Lua script: ask the server something, read its answer, build a wheel from it. See docs/SCRIPTING.md.
+radialmenu.action.script.source.tip=The script. One line per field, as it would be written in a file.
+radialmenu.action.script.timeoutTicks.tip=How long the script may stay alive, waiting included. 600 ticks is 30 seconds.
+radialmenu.editor.editScript=Edit script (%d lines)
+radialmenu.script.title=Script
+radialmenu.script.position=Ln %d, Col %d - %d lines
+radialmenu.script.snippets.show=Show API
+radialmenu.script.snippets.hide=Hide API
+radialmenu.script.snippets.tip=Click an entry to write it into the script where the caret is.

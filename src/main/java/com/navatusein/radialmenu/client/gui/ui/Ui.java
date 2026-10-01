@@ -3,6 +3,9 @@ package com.navatusein.radialmenu.client.gui.ui;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.ScaledResolution;
+
+import org.lwjgl.opengl.GL11;
 
 /**
  * One place for every measurement and colour the mod's screens use.
@@ -36,6 +39,19 @@ public final class Ui {
     public static final int LIST_BG = 0xC0000000;
     public static final int ROW_HOVER = 0x30FFFFFF;
     public static final int ROW_SELECTED = 0x50FFFFFF;
+
+    /** Code editor: one colour per kind of token, plus the marks drawn behind the text. */
+    public static final int CODE_PLAIN = 0xFFE0E0E0;
+    public static final int CODE_KEYWORD = 0xFFD98BD9;
+    public static final int CODE_API = 0xFF5FD7D7;
+    public static final int CODE_STRING = 0xFF9ACD68;
+    public static final int CODE_NUMBER = 0xFFE0A355;
+    public static final int CODE_COMMENT = 0xFF7A7A7A;
+    public static final int CODE_OPERATOR = 0xFFB4B4B4;
+    public static final int CODE_GUTTER = 0xFF6A6A6A;
+    public static final int CODE_CURRENT_LINE = 0x18FFFFFF;
+    public static final int CODE_SELECTION = 0x604A90D9;
+    public static final int CODE_ERROR_LINE = 0x40FF5555;
 
     public static final int TEXT = 0xFFFFFFFF;
     public static final int TEXT_MUTED = 0xFF9A9A9A;
@@ -81,6 +97,31 @@ public final class Ui {
     public static void rowLabel(String text, int left, int rowTop) {
         FontRenderer font = font();
         font.drawString(text, left + LABEL_WIDTH - font.getStringWidth(text), rowTop + (ROW - 8) / 2, TEXT_MUTED);
+    }
+
+    /**
+     * Clips drawing to a rectangle given in scaled GUI pixels.
+     *
+     * <p>
+     * Here rather than in each screen because of what it has to convert: {@code glScissor} works in real window pixels
+     * measured from the bottom-left, while everything else in the interface is in scaled GUI pixels from the top-left,
+     * so both axes change. Two copies of that arithmetic is one copy too many.
+     */
+    public static void beginClip(int left, int top, int right, int bottom) {
+        Minecraft mc = Minecraft.getMinecraft();
+        ScaledResolution resolution = new ScaledResolution(mc, mc.displayWidth, mc.displayHeight);
+        int scale = resolution.getScaleFactor();
+
+        GL11.glEnable(GL11.GL_SCISSOR_TEST);
+        GL11.glScissor(
+            left * scale,
+            (resolution.getScaledHeight() - bottom) * scale,
+            Math.max(0, right - left) * scale,
+            Math.max(0, bottom - top) * scale);
+    }
+
+    public static void endClip() {
+        GL11.glDisable(GL11.GL_SCISSOR_TEST);
     }
 
     /** Shortens text with an ellipsis so it cannot run past the width it was given. */

@@ -6,6 +6,7 @@ import net.minecraft.client.resources.I18n;
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
 import com.navatusein.radialmenu.client.gui.ui.UiColorButton;
+import com.navatusein.radialmenu.client.gui.ui.UiIconButton;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileStorage;
@@ -180,8 +181,16 @@ public class GuiProfileColors extends UiScreen {
                 editable ? I18n.format(swatch.labelKey() + ".tip") : FieldControls.colorOffTip(swatch.key));
 
             // One colour at a time: clearing all of them to put a single one back was a poor trade.
-            GuiButton clear = new GuiButton(ID_CLEAR_BASE + index, clearLeft, y, CLEAR_WIDTH, Ui.ROW, "x");
-            clear.enabled = editable && !colors[index].isEmpty();
+            GuiButton clear = new UiIconButton(
+                ID_CLEAR_BASE + index,
+                clearLeft,
+                y,
+                CLEAR_WIDTH,
+                Ui.ROW,
+                UiIconButton.Icon.CROSS);
+            // Not gated on editable: the picker is off because that part of the wheel is not drawn, but the colour is
+            // still there to drop, and dropping it is how the row goes back to inheriting.
+            clear.enabled = !colors[index].isEmpty();
             this.buttonList.add(clear);
             tooltip(ID_CLEAR_BASE + index, I18n.format("radialmenu.profileColors.clear.tip"));
 

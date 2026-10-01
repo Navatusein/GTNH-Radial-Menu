@@ -53,4 +53,11 @@ public class RadialMenuConfig {
     @Config.DefaultBoolean(true)
     @Config.Order(6)
     public static boolean lendKeyCodeToUnbound;
+
+    @Config.Comment("Allow entries to run Lua scripts. A script is stored in the profile, so a profile copied from "
+        + "somebody else brings theirs with it - it can send anything to the server that you could type. Turn this "
+        + "off to refuse to run them at all.")
+    @Config.DefaultBoolean(true)
+    @Config.Order(7)
+    public static boolean enableScripts;
 }

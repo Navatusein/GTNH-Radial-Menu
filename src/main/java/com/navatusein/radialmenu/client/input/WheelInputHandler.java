@@ -9,6 +9,7 @@ import com.navatusein.radialmenu.client.gui.GuiRadialWheel;
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.editor.GuiProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
+import com.navatusein.radialmenu.client.script.ScriptHost;
 
 import cpw.mods.fml.common.eventhandler.EventPriority;
 import cpw.mods.fml.common.eventhandler.SubscribeEvent;
@@ -48,6 +49,10 @@ public class WheelInputHandler {
             }
             autoBindApplied = false;
             KeybindStateTracker.releaseAll();
+            // A script waiting for a chat line it will never get now, on a server it is no longer talking to.
+            if (ScriptHost.hasRunning()) {
+                ScriptHost.cancelAll("left the world");
+            }
             return;
         }
 
@@ -63,6 +68,11 @@ public class WheelInputHandler {
             // is fine, because isPressed() is a counter that waits until something takes it.
             WithoutScreen.armNextTick();
         }
+        // After runPending, and that order is load-bearing: a choice made last tick is applied by the resume executor
+        // in the queue above, so by the time the host looks, a wheel that closed because of it is not read as a wheel
+        // the player dismissed.
+        ScriptHost.onClientTick();
+
         GuiStack.openRequested();
 
         if (WheelKeyBindings.nextProfile.isPressed()) {

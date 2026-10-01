@@ -16,6 +16,15 @@ public class ActionField {
     public enum Kind {
         STRING,
         MULTILINE_STRING,
+        /**
+         * Source code, edited in the code editor rather than as a column of one-line fields.
+         *
+         * <p>
+         * Stored exactly like {@link #MULTILINE_STRING} - one string with newlines - and separate from it because the
+         * two want different screens. Lines of commands are a numbered list, where the number is the order they are
+         * sent in; thirty lines of Lua want indentation, a caret that moves between lines, and colour.
+         */
+        CODE,
         INT,
         BOOLEAN,
         ENUM,
@@ -125,6 +134,10 @@ public class ActionField {
 
     public static ActionField multiline(String key, String labelKey, String defaultValue) {
         return new ActionField(key, labelKey, Kind.MULTILINE_STRING, defaultValue, null, false, 0, 0);
+    }
+
+    public static ActionField code(String key, String labelKey, String defaultValue) {
+        return new ActionField(key, labelKey, Kind.CODE, defaultValue, null, false, 0, 0);
     }
 
     public static ActionField integer(String key, String labelKey, int defaultValue) {

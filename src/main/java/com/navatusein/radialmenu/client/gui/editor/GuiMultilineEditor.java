@@ -11,6 +11,7 @@ import org.lwjgl.input.Keyboard;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
+import com.navatusein.radialmenu.client.gui.ui.UiIconButton;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 
 /**
@@ -114,8 +115,14 @@ public class GuiMultilineEditor extends UiScreen {
             fields.add(field);
             fieldLineIndex.add(Integer.valueOf(i));
 
-            this.buttonList
-                .add(new GuiButton(ID_REMOVE_BASE + i, contentRight() - REMOVE_WIDTH, y, REMOVE_WIDTH, Ui.ROW, "x"));
+            this.buttonList.add(
+                new UiIconButton(
+                    ID_REMOVE_BASE + i,
+                    contentRight() - REMOVE_WIDTH,
+                    y,
+                    REMOVE_WIDTH,
+                    Ui.ROW,
+                    UiIconButton.Icon.CROSS));
             y += Ui.STEP;
         }
         focusLine = -1;
