@@ -17,7 +17,8 @@ Client-side radial menu for Minecraft 1.7.10. Hold a key, point at a sector, rel
 
 The point of the mod is to **press a keybinding that has no key assigned**. In a pack the size of GTNH there are
 not enough keys on a keyboard to go round, so actions live on menu slots instead of in the controls screen. A slot
-can also send a command, switch profiles, open a submenu, or run several of those in order.
+can also send a command, switch profiles, open a submenu, run several of those in order, or run a Lua script that
+builds its own menu out of what the server just said.
 
 The mod registers no network channels and has no server side: everything it does is something you could have done
 by hand, so it works on unmodified servers and other players need nothing.
@@ -50,6 +51,7 @@ key can be a mouse button.
 | Profile switch | Switches to another profile, or cycles to the next one |
 | Submenu | Opens a nested wheel with its own slot count, layout and colours |
 | Chain | Runs several of the above in order, with an optional delay between them |
+| Script | Runs Lua: ask the server something, read its reply, and build a wheel out of what it said |
 
 #### Icons
 
@@ -96,17 +98,42 @@ filled one edits it — and clicking the hole in the middle opens the settings o
 
 ![Edit mode](/docs/assets/wheel-edit.png)
 
-A slot is its appearance and its action: a title, an icon, and one of the five things a slot can do. The fields
-below the tabs are whatever that action needs, so the screen has nothing on it that does not apply.
+A slot is its appearance and its action: a title, an icon, and one of the things a slot can do. The fields below the
+tabs are whatever that action needs, so the screen has nothing on it that does not apply.
 
 ![Slot editor](/docs/assets/slot-editor.png)
 
-Two of the five carry more than a field or two. A submenu is a wheel of its own — its slot count, its layout and its
+Some of them carry more than a field or two. A submenu is a wheel of its own — its slot count, its layout and its
 colours are the slot's settings — and a chain is a list of steps, each one an action in its own right.
 
 | Submenu | Chain |
 |---|---|
 | ![Submenu settings](/docs/assets/slot-editor-submenu.png) | ![Chain steps](/docs/assets/slot-editor-chain.png) |
+
+#### Scripts
+
+A script is for the case the other actions are deliberately no good at: a menu whose entries are not known until the
+game is running. Send `/home list`, read the reply, split it, and offer the homes on a wheel — then send the command
+for whichever one was chosen.
+
+```lua
+chat.send("/home list " .. player.name)
+local list = chat.await("^" .. player.name .. ": %d+ / %d+: (.+)$")
+if not list then return end
+
+local homes = {}
+for name in list:gmatch("[^,%s]+") do homes[#homes + 1] = name end
+
+local pick = menu.open(homes, {title = "Homes", slots = 8})
+if pick then chat.send("/home " .. pick .. " " .. player.name) end
+```
+
+Scripts are written in a code editor with syntax highlighting, line numbers and a list of the calls available, which
+writes them in for you. A script that fails says where: the line it names is marked when the editor is next opened.
+
+Everything a script can call is documented in [docs/SCRIPTING.md](docs/SCRIPTING.md). It still does only what you
+could do by hand — send chat, press a binding, open a menu — and it is stored inside the profile, so a profile copied
+from someone else brings their scripts with it. `enableScripts` in the config refuses to run them at all.
 
 #### Layout
 
@@ -114,7 +141,8 @@ A menu is either **fixed** or **dynamic**. Fixed keeps every entry at the same a
 which is what makes muscle memory work; empty positions stay as gaps. Dynamic divides the ring by however many
 entries there are, so a new entry moves all the others.
 
-The same screen carries the menu's own colours and the order of its entries. Every wheel has one, the root included.
+The same screen carries the menu's own colours and the order of its entries — drag an entry by the grip on its left,
+or move it a place at a time with the arrows. Every wheel has one, the root included.
 
 ![Menu settings](/docs/assets/menu-settings.png)
 
@@ -156,7 +184,8 @@ copying the file carries them with it.
 a server address right.
 
 The format is documented for hand-editing in [docs/PROFILE_FORMAT.md](docs/PROFILE_FORMAT.md) — every action type,
-its parameters, and which of them are required.
+its parameters, and which of them are required. What a script can call is in
+[docs/SCRIPTING.md](docs/SCRIPTING.md).
 
 <a id="configuration"></a>
 
@@ -167,7 +196,7 @@ five categories:
 
 | Category | What it holds |
 |---|---|
-| General | Release or click to select, choosing by scrolling, how the editor is opened, whether the game keeps taking input while the wheel is up |
+| General | Release or click to select, choosing by scrolling, how the editor is opened, whether the game keeps taking input while the wheel is up, whether scripts may run |
 | Wheel | Radii, the gap between sectors, line thickness, which lines are drawn, the soft edge, the plate behind each icon |
 | Colors | Ring fill and outline, highlight fill and outline, the wash behind the screen, sprite tint |
 | Accent | How far each of those colours lands from an accent colour, and how opaque it is |

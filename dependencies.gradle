@@ -54,5 +54,12 @@ dependencies {
         runtimeOnlyNonPublishable(rfg.deobf(files(jar)))
     }
 
+    // Lua for the script action. LuaJ is the interpreter already proven on this target - ComputerCraft shipped it
+    // on 1.7.10 - so Java 8 bytecode and a 1.7.10 classpath are settled questions rather than hopes. Shadowed and
+    // relocated, because ComputerCraft and OpenComputers each put their own LuaJ on the pack classpath and a
+    // version clash there would break their mods rather than ours.
+    shadowImplementation("org.luaj:luaj-jse:3.0.1")
+    testImplementation("org.luaj:luaj-jse:3.0.1")
+
     testImplementation("junit:junit:4.13.2")
 }

@@ -13,6 +13,7 @@ import com.navatusein.radialmenu.client.gui.editor.GuiMenuSettings;
 import com.navatusein.radialmenu.client.gui.editor.GuiSlotEditor;
 import com.navatusein.radialmenu.client.input.HeldKeyResync;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
+import com.navatusein.radialmenu.client.script.ScriptHost;
 import com.navatusein.radialmenu.config.RadialMenuConfig;
 import com.navatusein.radialmenu.config.WheelConfig;
 import com.navatusein.radialmenu.core.geometry.RadialGeometry;
@@ -44,6 +45,9 @@ public class GuiRadialWheel extends GuiScreen {
      */
     private boolean sticky;
 
+    /** Built by a script for one choice, rather than read from a profile. Not editable, and sticky from the start. */
+    private final boolean scripted;
+
     /** What is selected: where the cursor points, or what the wheel was turned to. */
     /** The clock behind the opening animation and the push under the cursor. */
     private final WheelAnimator animator = new WheelAnimator();
@@ -59,9 +63,50 @@ public class GuiRadialWheel extends GuiScreen {
      */
     private int pointerSlot = RadialGeometry.NO_SLOT;
 
+    /**
+     * A wheel a script built, rather than one from the active profile.
+     *
+     * <p>
+     * Sticky from the first frame, because there is no key being held: by the time a script opens a menu the player let
+     * go of the wheel key long ago, and a wheel that closed on the next release would never be seen. Not editable
+     * either - the menu is built for one choice and thrown away, so a slot editor pointed at it would be editing
+     * something that stops existing the moment it is answered.
+     */
+    public GuiRadialWheel(MenuNode root) {
+        this(root, true);
+    }
+
     public GuiRadialWheel() {
+        this(ProfileManager.active().root, false);
+    }
+
+    private GuiRadialWheel(MenuNode root, boolean scripted) {
         this.allowUserInput = RadialMenuConfig.allowInputWhileOpen;
-        this.path.push(ProfileManager.active().root);
+        this.path.push(root);
+        this.scripted = scripted;
+        this.sticky = scripted;
+    }
+
+    /**
+     * Swaps what the wheel is showing, for a script that kept it open.
+     *
+     * <p>
+     * Deliberately without resetting the animator: this is the same wheel showing different entries, and replaying the
+     * arrival would read as a second menu rather than as a list that changed.
+     */
+    public void replaceRoot(MenuNode root) {
+        path.clear();
+        path.push(root);
+    }
+
+    @Override
+    public void onGuiClosed() {
+        super.onGuiClosed();
+        // Whatever took the screen away - a choice, Escape, another mod's GUI - the script that opened it has to hear
+        // about it, or it waits for an answer that can no longer come.
+        if (scripted) {
+            ScriptHost.wheelClosed(this);
+        }
     }
 
     @Override
@@ -149,9 +194,9 @@ public class GuiRadialWheel extends GuiScreen {
         return count;
     }
 
-    /** Shift, unless the player configured right-click for editing instead. */
+    /** Shift, unless the player configured right-click for editing instead. Never on a script's wheel. */
     private boolean isEditModifierDown() {
-        return !RadialMenuConfig.rightClickToEdit && isShiftKeyDown();
+        return !scripted && !RadialMenuConfig.rightClickToEdit && isShiftKeyDown();
     }
 
     /**
@@ -165,8 +210,10 @@ public class GuiRadialWheel extends GuiScreen {
     private String breadcrumb() {
         StringBuilder builder = new StringBuilder();
         MenuNode[] nodes = path.toArray(new MenuNode[0]);
-        // The deque has the current menu first, so walk it backwards to read root-to-here.
-        for (int i = nodes.length - 2; i >= 0; i--) {
+        // The deque has the current menu first, so walk it backwards to read root-to-here. A script's root is named
+        // here rather than skipped: the profile name says nothing about a menu the script built, so its own title is
+        // the only thing that would.
+        for (int i = nodes.length - (scripted ? 1 : 2); i >= 0; i--) {
             String title = nodes[i].title;
             if (title == null || title.isEmpty()) {
                 continue;
@@ -181,7 +228,8 @@ public class GuiRadialWheel extends GuiScreen {
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int button) {
-        boolean editRequested = RadialMenuConfig.rightClickToEdit ? button == 1 : button == 0 && isShiftKeyDown();
+        boolean editRequested = !scripted
+            && (RadialMenuConfig.rightClickToEdit ? button == 1 : button == 0 && isShiftKeyDown());
 
         if (editRequested) {
             // The dead zone is the menu itself rather than any one entry, so editing there edits the menu - which is

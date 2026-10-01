@@ -141,8 +141,20 @@ with no icon is harder to recognise than one showing the wrong block.
 
 `action` is `{ "type": ..., "params": { ... }, "steps": [ ... ] }`.
 
-> **Every value in `params` is a string.** Numbers and booleans included: `"20"`, `"true"`. A real JSON number or
-> boolean there will not be read.
+> **Every value in `params` is a string**, numbers and booleans included: `"20"`, `"true"`. A real JSON `20` or `true`
+> is read as its text rather than refused — it used to throw hard enough to take the whole profile with it — but write
+> the quoted form, which is what the editor saves.
+
+A value may also be written as an **array of lines**, which is the readable way to put a chain of commands or a Lua
+script in a file:
+
+```json
+"params": { "command": ["/home", "/time day"] }
+```
+
+The array becomes one string with `\n` between the lines — exactly the same thing the quoted form means. A value with
+newlines in it is written back out as an array, so a file written this way still looks like this after the editor saves
+it.
 
 ### `keybind` — press a keybinding
 
@@ -242,6 +254,41 @@ Rules that matter when generating one:
   step with no text. The chain still runs its other steps.
 - A step cannot be a submenu. There is no such action.
 - Triggering the entry again restarts the chain rather than overlapping a second copy.
+
+### `script` — run a Lua script
+
+For the one thing stored parameters cannot express: a menu whose entries are not known until the game is running,
+because they came out of a server's reply.
+
+| Param | Required | Meaning |
+|---|---|---|
+| `script` | **yes** | The source. A plain string with `\n`, or an array of lines. |
+| `timeoutTicks` | no | How long the script may stay alive, waiting included. Default `"600"`. `"0"` means no limit. |
+
+```json
+{
+  "type": "script",
+  "params": {
+    "script": [
+      "chat.send('/home list ' .. player.name)",
+      "local list = chat.await('^' .. player.name .. ': %d+ / %d+: (.+)$')",
+      "if not list then return end",
+      "local homes = {}",
+      "for name in list:gmatch('[^,%s]+') do homes[#homes + 1] = name end",
+      "local pick = menu.open(homes, { title = 'Homes', slots = 8 })",
+      "if pick then chat.send('/home ' .. pick .. ' ' .. player.name) end"
+    ]
+  }
+}
+```
+
+**`docs/SCRIPTING.md` is the reference for what a script can call** — this section is only the shape it is stored in.
+Two things worth knowing before writing one into a file:
+
+- The script travels with the profile. A profile copied from somebody else runs their code, and a script can send
+  anything to the server that the player could type. `enableScripts` in the mod config refuses to run them at all.
+- Patterns are **Lua patterns**, not regular expressions: `%d` rather than `\d`, and no alternation. A pattern written
+  as a regex quietly matches nothing.
 
 ## Colours
 

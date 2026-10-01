@@ -10,6 +10,8 @@ import com.navatusein.radialmenu.client.action.ActionExecutors;
 import com.navatusein.radialmenu.client.action.CommandActionExecutor;
 import com.navatusein.radialmenu.client.action.KeyActionExecutor;
 import com.navatusein.radialmenu.client.action.ProfileSwitchExecutor;
+import com.navatusein.radialmenu.client.action.ScriptActionExecutor;
+import com.navatusein.radialmenu.client.action.ScriptResumeExecutor;
 import com.navatusein.radialmenu.client.action.SequenceExecutor;
 import com.navatusein.radialmenu.client.command.CommandRadialMenu;
 import com.navatusein.radialmenu.client.gui.WheelOverlayHandler;
@@ -18,6 +20,7 @@ import com.navatusein.radialmenu.client.input.WheelInputHandler;
 import com.navatusein.radialmenu.client.input.WheelKeyBindings;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileStorage;
+import com.navatusein.radialmenu.client.script.ChatCapture;
 import com.navatusein.radialmenu.config.AccentConfig;
 import com.navatusein.radialmenu.config.AnimationConfig;
 import com.navatusein.radialmenu.config.ColorConfig;
@@ -55,6 +58,10 @@ public class ClientProxy extends CommonProxy {
         ActionExecutors.register(new ProfileSwitchExecutor());
         ActionExecutors.register(new CommandActionExecutor());
         ActionExecutors.register(new SequenceExecutor());
+        ActionExecutors.register(new ScriptActionExecutor());
+        // Registered like any other executor, though no profile ever names it: a script's menu entries carry one, and
+        // they go through the same queue as everything else.
+        ActionExecutors.register(new ScriptResumeExecutor());
     }
 
     @Override
@@ -69,6 +76,9 @@ public class ClientProxy extends CommonProxy {
 
         // Overlay rendering is a Forge-bus event, unlike the ticks and key input the mod listens to on the FML bus.
         MinecraftForge.EVENT_BUS.register(new WheelOverlayHandler());
+        // Chat is a Forge-bus event too - and one that arrives on Netty's thread, which is why the listener only
+        // queues what it hears. See ChatCapture.
+        MinecraftForge.EVENT_BUS.register(new ChatCapture.Listener());
 
         WheelKeyBindings.register();
         FMLCommonHandler.instance()

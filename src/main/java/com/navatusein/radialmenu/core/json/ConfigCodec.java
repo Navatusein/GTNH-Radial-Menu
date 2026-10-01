@@ -19,6 +19,7 @@ public final class ConfigCodec {
 
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting()
         .registerTypeAdapterFactory(new LowercaseEnumAdapterFactory())
+        .registerTypeAdapterFactory(new StringMapAdapterFactory())
         .create();
 
     private ConfigCodec() {}

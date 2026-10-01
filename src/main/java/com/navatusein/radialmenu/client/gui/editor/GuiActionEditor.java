@@ -9,14 +9,18 @@ import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
 
+import org.lwjgl.input.Mouse;
+
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
 import com.navatusein.radialmenu.client.gui.ui.UiCheckbox;
 import com.navatusein.radialmenu.client.gui.ui.UiColorButton;
+import com.navatusein.radialmenu.client.gui.ui.UiIconButton;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.gui.ui.UiTabButton;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
 import com.navatusein.radialmenu.client.profile.ProfileStorage;
+import com.navatusein.radialmenu.client.script.ScriptHost;
 import com.navatusein.radialmenu.config.ColorConfig;
 import com.navatusein.radialmenu.core.action.ActionField;
 import com.navatusein.radialmenu.core.action.ActionSpec;
@@ -56,6 +60,23 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
     private static final int ID_STEP_REMOVE_BASE = 4000;
 
     private static final int ARROW = 18;
+
+    /** Space either side of a tab's label, between two tabs, and the width of a scroll arrow. */
+    private static final int TAB_PADDING = 6;
+    private static final int TAB_GAP = 2;
+    private static final int TAB_ARROW = 12;
+
+    private static final int ID_TAB_PREV = 8;
+    private static final int ID_TAB_NEXT = 9;
+
+    /** First tab shown, when there are more than fit. Kept across rebuilds, so typing does not move the strip. */
+    private int tabScroll;
+
+    private int tabVisible;
+    private int tabCount;
+
+    /** Where the strip was drawn, so the wheel can tell whether the cursor is over it. */
+    private int tabRowTop = -1;
 
     /** The action being edited. */
     protected ActionSpec spec;
@@ -109,21 +130,7 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
         stepsSectionTop = -1;
         stepCount = 0;
 
-        List<ActionType> types = offeredTypes();
-        int tabWidth = (contentWidth() - (types.size() - 1) * 2) / Math.max(1, types.size());
-        for (int i = 0; i < types.size(); i++) {
-            ActionType type = types.get(i);
-            this.buttonList.add(
-                new UiTabButton(
-                    ID_TAB_BASE + i,
-                    left + i * (tabWidth + 2),
-                    y,
-                    tabWidth,
-                    I18n.format(type.labelKey),
-                    type.id.equals(selectedType)));
-            tooltip(ID_TAB_BASE + i, describe(type.labelKey + ".tip"));
-        }
-        y += UiTabButton.HEIGHT + Ui.GAP;
+        y = buildTabs(offeredTypes(), y, left);
 
         ActionType selected = ActionTypes.get(selectedType);
         if (selected == null) {
@@ -150,6 +157,124 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
         return y;
     }
 
+    /**
+     * One row of tabs, each as wide as its own label, scrolled sideways when they no longer fit.
+     *
+     * <p>
+     * They used to be equal fractions of the width, which is fine for three types and wrong for six: "Command" and
+     * "Submenu" came out as "Comma..." and "Subme...", and a tab that cannot say what it is has lost the one thing a
+     * tab
+     * is for. More action types are coming, so the row scrolls rather than divides: tabs keep their labels whatever the
+     * count, and the strip stays one row tall instead of eating the height the fields need.
+     *
+     * <p>
+     * Only whole tabs are built, the same rule the scrolling lists follow. A tab cut off at the edge would still be a
+     * whole button to the hit test, so clicking the half that is not there would select a type the player cannot see.
+     */
+    private int buildTabs(List<ActionType> types, int y, int left) {
+        tabRowTop = y;
+        tabCount = types.size();
+
+        int[] widths = new int[types.size()];
+        int natural = 0;
+        for (int i = 0; i < types.size(); i++) {
+            widths[i] = this.fontRendererObj.getStringWidth(I18n.format(types.get(i).labelKey)) + TAB_PADDING * 2;
+            natural += widths[i] + (i > 0 ? TAB_GAP : 0);
+        }
+
+        int available = contentWidth();
+        if (natural <= available) {
+            // Everything fits: spread the slack so the row reads as one strip rather than a ragged edge.
+            tabScroll = 0;
+            tabVisible = types.size();
+            layoutTabs(types, widths, 0, types.size(), left, y, available - natural);
+            return y + UiTabButton.HEIGHT + Ui.GAP;
+        }
+
+        int strip = available - 2 * (TAB_ARROW + TAB_GAP);
+        tabScroll = Math.max(0, Math.min(tabScroll, types.size() - 1));
+
+        // The selected tab is the one the player is looking at; scrolling it out of sight would leave the row showing
+        // six types and no sign of which is in use.
+        int selected = indexOfType(types, selectedType);
+        if (selected >= 0) {
+            if (selected < tabScroll) {
+                tabScroll = selected;
+            }
+            while (selected >= tabScroll + fittingTabs(widths, tabScroll, strip) && tabScroll < types.size() - 1) {
+                tabScroll++;
+            }
+        }
+
+        tabVisible = fittingTabs(widths, tabScroll, strip);
+        int tabsLeft = left + TAB_ARROW + TAB_GAP;
+
+        addArrow(ID_TAB_PREV, left, y, "<", tabScroll > 0);
+        layoutTabs(types, widths, tabScroll, tabVisible, tabsLeft, y, 0);
+        addArrow(ID_TAB_NEXT, contentRight() - TAB_ARROW, y, ">", tabScroll + tabVisible < types.size());
+
+        return y + UiTabButton.HEIGHT + Ui.GAP;
+    }
+
+    private void layoutTabs(List<ActionType> types, int[] widths, int from, int count, int left, int y, int extra) {
+        int x = left;
+        for (int i = 0; i < count; i++) {
+            int index = from + i;
+            ActionType type = types.get(index);
+            int width = widths[index] + (count > 0 ? extra / count + (i < extra % count ? 1 : 0) : 0);
+            this.buttonList.add(
+                new UiTabButton(
+                    ID_TAB_BASE + index,
+                    x,
+                    y,
+                    width,
+                    I18n.format(type.labelKey),
+                    type.id.equals(selectedType)));
+            tooltip(ID_TAB_BASE + index, describe(type.labelKey + ".tip"));
+            x += width + TAB_GAP;
+        }
+    }
+
+    /** How many whole tabs fit in the strip, starting from one. At least one, or a long label would show nothing. */
+    private static int fittingTabs(int[] widths, int from, int strip) {
+        int count = 0;
+        int total = 0;
+        while (from + count < widths.length) {
+            int next = total + widths[from + count] + (count > 0 ? TAB_GAP : 0);
+            if (count > 0 && next > strip) {
+                break;
+            }
+            total = next;
+            count++;
+        }
+        return Math.max(1, count);
+    }
+
+    private void addArrow(int id, int x, int y, String label, boolean enabled) {
+        UiTabButton arrow = new UiTabButton(id, x, y, TAB_ARROW, label, false);
+        arrow.enabled = enabled;
+        this.buttonList.add(arrow);
+    }
+
+    private static int indexOfType(List<ActionType> types, String id) {
+        for (int i = 0; i < types.size(); i++) {
+            if (types.get(i).id.equals(id)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /** Moves the strip by one tab. Called by the arrows and by the wheel while the cursor is over the row. */
+    private void scrollTabs(int by) {
+        int next = Math.max(0, Math.min(tabScroll + by, Math.max(0, tabCount - 1)));
+        if (next != tabScroll) {
+            captureInputs();
+            tabScroll = next;
+            requestRebuild();
+        }
+    }
+
     private int buildStepRows(int y, int left) {
         List<ActionSpec> steps = spec.stepsOrEmpty();
         stepCount = steps.size();
@@ -167,13 +292,20 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
                 .add(new GuiButton(ID_STEP_EDIT_BASE + i, left, y, rowWidth, Ui.ROW, Ui.fit(label, rowWidth - 8)));
             tooltip(ID_STEP_EDIT_BASE + i, describe("radialmenu.steps.edit.tip"));
 
-            GuiButton up = new GuiButton(ID_STEP_UP_BASE + i, upLeft, y, ARROW, Ui.ROW, "^");
-            GuiButton down = new GuiButton(ID_STEP_DOWN_BASE + i, downLeft, y, ARROW, Ui.ROW, "v");
+            GuiButton up = new UiIconButton(ID_STEP_UP_BASE + i, upLeft, y, ARROW, Ui.ROW, UiIconButton.Icon.UP);
+            GuiButton down = new UiIconButton(
+                ID_STEP_DOWN_BASE + i,
+                downLeft,
+                y,
+                ARROW,
+                Ui.ROW,
+                UiIconButton.Icon.DOWN);
             up.enabled = i > 0;
             down.enabled = i < steps.size() - 1;
             this.buttonList.add(up);
             this.buttonList.add(down);
-            this.buttonList.add(new GuiButton(ID_STEP_REMOVE_BASE + i, removeLeft, y, ARROW, Ui.ROW, "x"));
+            this.buttonList
+                .add(new UiIconButton(ID_STEP_REMOVE_BASE + i, removeLeft, y, ARROW, Ui.ROW, UiIconButton.Icon.CROSS));
 
             y += Ui.STEP;
         }
@@ -213,16 +345,18 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
             fieldInputs.add(null);
 
             if (FieldControls.hasClear(field)) {
-                GuiButton clear = new GuiButton(
+                GuiButton clear = new UiIconButton(
                     ID_CLEAR_BASE + index,
                     controlLeft + mainWidth + Ui.GAP,
                     y,
                     FieldControls.CLEAR_WIDTH,
                     Ui.ROW,
-                    "x");
-                clear.enabled = editable && current != null
-                    && !current.trim()
-                        .isEmpty();
+                    UiIconButton.Icon.CROSS);
+                // Clearing stays available even when the picker is off. The colour is still stored and still inherited
+                // from the moment that part of the wheel is switched back on, so "drop this and go back to inheriting"
+                // is a decision the player can want to make now rather than after a trip through the config.
+                clear.enabled = current != null && !current.trim()
+                    .isEmpty();
                 this.buttonList.add(clear);
                 tooltip(ID_CLEAR_BASE + index, describe("radialmenu.profileColors.clear.tip"));
             }
@@ -262,6 +396,28 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
 
     // -- input ---------------------------------------------------------------------------------------------------
 
+    /**
+     * The wheel moves the tab strip while the cursor is over it, and the page otherwise.
+     *
+     * <p>
+     * Without this the only way through a long row of types is the arrows, and a row that scrolls but ignores the wheel
+     * reads as broken rather than as deliberate.
+     */
+    @Override
+    public void handleMouseInput() {
+        if (tabRowTop >= 0 && tabCount > tabVisible) {
+            int mouseY = this.height - Mouse.getEventY() * this.height / this.mc.displayHeight - 1;
+            if (mouseY >= tabRowTop && mouseY < tabRowTop + UiTabButton.HEIGHT) {
+                int wheel = Mouse.getEventDWheel();
+                if (wheel != 0) {
+                    scrollTabs(wheel > 0 ? -1 : 1);
+                    return;
+                }
+            }
+        }
+        super.handleMouseInput();
+    }
+
     /** @return whether the button belonged to the action section */
     protected boolean handleActionButton(GuiButton button) {
         if (button.id >= ID_STEP_EDIT_BASE) {
@@ -273,6 +429,15 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
                 spec.stepsOrEmpty()
                     .size(),
                 null);
+            return true;
+        }
+
+        if (button.id == ID_TAB_PREV) {
+            scrollTabs(-1);
+            return true;
+        }
+        if (button.id == ID_TAB_NEXT) {
+            scrollTabs(1);
             return true;
         }
 
@@ -412,6 +577,22 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
                         requestRebuild();
                     }
                 }));
+                return;
+            case CODE:
+                captureInputs();
+                GuiStack.push(
+                    new GuiScriptEditor(
+                        "radialmenu.script.title",
+                        current,
+                        ScriptHost.lastError(spec),
+                        new GuiScriptEditor.Result() {
+
+                            @Override
+                            public void onScriptEdited(String text) {
+                                spec.set(key, text);
+                                requestRebuild();
+                            }
+                        }));
                 return;
             case COLOR:
                 captureInputs();

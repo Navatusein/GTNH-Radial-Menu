@@ -38,6 +38,25 @@ public final class ActionTypes {
      */
     public static final String SUBMENU = "submenu";
 
+    /**
+     * Run a Lua script.
+     *
+     * <p>
+     * For the case the other types are deliberately no good at: a menu whose entries are not known until the game is
+     * running, because they came out of a server's reply. See {@code docs/SCRIPTING.md} for the contract.
+     */
+    public static final String SCRIPT = "script";
+
+    /**
+     * Hands a script the entry the player chose from a menu it opened.
+     *
+     * <p>
+     * Deliberately not registered as a type, so the editor never offers it and a profile never carries one: it is
+     * built at run time, lives for one activation, and exists only so a script-built wheel resolves a choice down the
+     * same road as every other entry - close, queue, next tick, executor.
+     */
+    public static final String SCRIPT_RESUME = "scriptResume";
+
     public static final String PARAM_BINDING = "binding";
     /**
      * Category of the chosen keybinding.
@@ -53,6 +72,14 @@ public final class ActionTypes {
     public static final String PARAM_COMMAND = "command";
     public static final String PARAM_DELAY_TICKS = "delayTicks";
     public static final String PARAM_CYCLE = "cycle";
+    /** The script source: one string with newlines, or - in the file - an array of lines. */
+    public static final String PARAM_SCRIPT = "script";
+    /** How long a script may stay alive, waiting included. */
+    public static final String PARAM_TIMEOUT_TICKS = "timeoutTicks";
+    /** Which running script a {@link #SCRIPT_RESUME} belongs to. */
+    public static final String PARAM_TOKEN = "token";
+    /** Which entry of the script's menu was chosen, counted from 1 as Lua counts. */
+    public static final String PARAM_CHOICE = "choice";
     public static final String PARAM_SLOT_MODE = "slotMode";
     public static final String PARAM_SLOT_COUNT = "slots";
     public static final String PARAM_ACCENT = "accent";
@@ -159,6 +186,15 @@ public final class ActionTypes {
                 ActionField.color(PARAM_HIGHLIGHT_COLOR, "radialmenu.action.submenu.highlightColor"),
                 ActionField.color(PARAM_HIGHLIGHT_BORDER_COLOR, "radialmenu.action.submenu.highlightBorderColor"),
                 ActionField.color(PARAM_BACKGROUND_COLOR, "radialmenu.action.submenu.backgroundColor")));
+
+        register(
+            new ActionType(
+                SCRIPT,
+                "radialmenu.action.script",
+                false,
+                ActionField.code(PARAM_SCRIPT, "radialmenu.action.script.source", "")
+                    .required(),
+                ActionField.integer(PARAM_TIMEOUT_TICKS, "radialmenu.action.script.timeoutTicks", 600)));
 
         register(
             new ActionType(

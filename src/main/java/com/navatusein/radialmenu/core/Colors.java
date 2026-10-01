@@ -99,6 +99,18 @@ public final class Colors {
         return ((Math.max(0, Math.min(255, alpha))) << 24) | (rgb & 0x00FFFFFF);
     }
 
+    /**
+     * Writes a colour back out as {@code 0xAARRGGBB}.
+     *
+     * <p>
+     * Eight digits always, never six: this is the form a file is read as taken exactly, and a six-digit value means
+     * "keep the opacity of whatever this replaces" instead. Writing an opaque colour as six digits would hand the next
+     * reader a value that depends on what it landed on.
+     */
+    public static String toHex8(int argb) {
+        return String.format("0x%08X", argb);
+    }
+
     private static String digits(String value) {
         if (value == null) {
             return "";

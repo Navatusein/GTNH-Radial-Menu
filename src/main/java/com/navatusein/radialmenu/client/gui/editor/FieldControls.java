@@ -59,6 +59,7 @@ final class FieldControls {
         switch (field.kind) {
             case KEYBIND_REF:
             case MULTILINE_STRING:
+            case CODE:
             case ENUM:
             case PROFILE_REF:
             case COLOR:
@@ -81,6 +82,11 @@ final class FieldControls {
                     : I18n.format(current);
             case MULTILINE_STRING:
                 return I18n.format("radialmenu.editor.editLines", Placeholders.splitLines(current).length);
+            case CODE:
+                // Every line, blank ones included: a script is read as a whole, and "12 lines" that silently means
+                // nine would be a count nobody can check.
+                return I18n
+                    .format("radialmenu.editor.editScript", current == null ? 0 : current.split("\r?\n", -1).length);
             case COLOR:
                 return isBlank(current) ? I18n.format("radialmenu.editor.inherit") : current;
             case ACCENT:

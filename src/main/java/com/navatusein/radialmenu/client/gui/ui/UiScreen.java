@@ -9,12 +9,10 @@ import java.util.Set;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.resources.I18n;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.GL11;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
 
@@ -398,19 +396,11 @@ public abstract class UiScreen extends GuiScreen {
      * scaled GUI pixels measured from the top-left, so both axes have to be converted.
      */
     private void beginClip() {
-        ScaledResolution resolution = new ScaledResolution(this.mc, this.mc.displayWidth, this.mc.displayHeight);
-        int scale = resolution.getScaleFactor();
-
-        GL11.glEnable(GL11.GL_SCISSOR_TEST);
-        GL11.glScissor(
-            panelLeft * scale,
-            (resolution.getScaledHeight() - contentBottom()) * scale,
-            (panelRight - panelLeft) * scale,
-            (contentBottom() - contentTop()) * scale);
+        Ui.beginClip(panelLeft, contentTop(), panelRight, contentBottom());
     }
 
     private void endClip() {
-        GL11.glDisable(GL11.GL_SCISSOR_TEST);
+        Ui.endClip();
     }
 
     private void drawTooltip(int mouseX, int mouseY) {
