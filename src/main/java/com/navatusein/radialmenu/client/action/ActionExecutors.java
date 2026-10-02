@@ -45,6 +45,10 @@ public final class ActionExecutors {
      * @return whether anything actually ran, which decides if a tick-phase reader has a press to find this tick
      */
     public static boolean runPending() {
+        // Before anything runs, so that an action scheduling "one tick from now" from inside this queue is due on the
+        // next tick rather than later in this one.
+        DelayedActions.beginTick();
+
         boolean ran = false;
         while (!PENDING.isEmpty()) {
             runNow(PENDING.poll());
