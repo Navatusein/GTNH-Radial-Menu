@@ -1,14 +1,20 @@
 package com.navatusein.radialmenu.client.gui.editor;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import net.minecraft.client.resources.I18n;
 
+import com.navatusein.radialmenu.client.gui.ui.Ui;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
+import com.navatusein.radialmenu.client.profile.ProfileStorage;
 import com.navatusein.radialmenu.config.AccentConfig;
 import com.navatusein.radialmenu.config.ColorConfig;
 import com.navatusein.radialmenu.config.WheelConfig;
 import com.navatusein.radialmenu.core.Colors;
 import com.navatusein.radialmenu.core.action.ActionField;
 import com.navatusein.radialmenu.core.action.ActionSpec;
+import com.navatusein.radialmenu.core.action.ActionType;
 import com.navatusein.radialmenu.core.action.ActionTypes;
 import com.navatusein.radialmenu.core.action.Placeholders;
 import com.navatusein.radialmenu.core.model.StyleResolver;
@@ -70,9 +76,59 @@ final class FieldControls {
         }
     }
 
+    /**
+     * How far the next row sits below this one.
+     *
+     * <p>
+     * Checkboxes that follow one another are one question asked in parts - Shift, Ctrl and Alt are not three settings
+     * that happen to be adjacent - so they stack a pixel apart and read as a block. Everything else keeps the ordinary
+     * step, which is what separates one setting from the next.
+     */
+    static int stepAfter(ActionField field, ActionField next) {
+        boolean grouped = next != null && field.kind == ActionField.Kind.BOOLEAN
+            && next.kind == ActionField.Kind.BOOLEAN;
+        return grouped ? Ui.GROUP_STEP : Ui.STEP;
+    }
+
     /** Whether the colour picker should offer opacity. An accent is a hue and nothing else. */
     static boolean pickerHasAlpha(ActionField field) {
         return field.kind != ActionField.Kind.ACCENT;
+    }
+
+    /**
+     * Fills in what a descriptor cannot carry: a default that depends on the client rather than on the type.
+     *
+     * <p>
+     * A fresh profile switch starts on the profile you are in. It used to start blank, which reads as a field nobody
+     * filled in - and blank is not nothing, it means "cycle to the next profile", a meaning an empty button has no way
+     * of conveying. Named in the list the button cycles through instead, where it says what it is.
+     *
+     * <p>
+     * Only for a newly created action. An action read from a file keeps whatever it was saved with, blank included.
+     */
+    static void applyClientDefaults(ActionSpec spec) {
+        ActionType type = ActionTypes.get(spec == null ? null : spec.type);
+        if (type == null) {
+            return;
+        }
+        for (ActionField field : type.fields) {
+            if (field.kind == ActionField.Kind.PROFILE_REF && isBlank(spec.getString(field.key, ""))) {
+                spec.set(field.key, ProfileManager.activeName());
+            }
+        }
+    }
+
+    /**
+     * What the profile button steps through: every profile, and then "next profile".
+     *
+     * <p>
+     * The blank is in the cycle rather than only at the start of it, so the one behaviour that cannot be named by a
+     * profile stays reachable after the button has been clicked once.
+     */
+    static List<String> profileOptions() {
+        List<String> options = new ArrayList<>(ProfileStorage.listProfileNames());
+        options.add("");
+        return options;
     }
 
     static String buttonLabel(ActionField field, String current) {
@@ -80,6 +136,8 @@ final class FieldControls {
             case KEYBIND_REF:
                 return current == null || current.isEmpty() ? I18n.format("radialmenu.editor.pickKeybind")
                     : I18n.format(current);
+            case PROFILE_REF:
+                return isBlank(current) ? I18n.format("radialmenu.action.profileSwitch.next") : current;
             case MULTILINE_STRING:
                 return I18n.format("radialmenu.editor.editLines", Placeholders.splitLines(current).length);
             case CODE:
