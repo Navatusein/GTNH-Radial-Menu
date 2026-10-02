@@ -37,18 +37,32 @@ class FakeScriptHost implements ScriptContext {
 
     boolean closedMenu;
 
+    /** The run {@link #run} drove last, so a failed assertion can say what stopped it. */
+    private ScriptTask lastTask;
+
     String playerName = "Nortcast";
     int dimension = 0;
     int x = 100;
     int y = 64;
     int z = -200;
 
+    /**
+     * The real instruction budget and entry cap, but not the real wall clock. Twenty milliseconds is a stutter in a
+     * warmed-up client; on a cold test JVM on a shared CI runner it is class loading, and a script that did nothing
+     * wrong was stopped before it opened its menu. The watchdog itself is proven by its own test with its own limits.
+     */
+    static final ScriptLimits TEST_LIMITS = new ScriptLimits(
+        ScriptLimits.DEFAULT.instructionsPerResume,
+        10_000_000_000L,
+        ScriptLimits.DEFAULT.maxMenuItems);
+
     ScriptTask run(String source) {
-        return run(source, ScriptLimits.DEFAULT);
+        return run(source, TEST_LIMITS);
     }
 
     ScriptTask run(String source, ScriptLimits limits) {
         ScriptTask task = ScriptTask.start(source, "test", "token-1", this, limits);
+        lastTask = task;
         drive(task);
         return task;
     }
@@ -115,7 +129,8 @@ class FakeScriptHost implements ScriptContext {
     /** The wheel the script opened first, which is the one most tests are about. */
     MenuNode firstMenu() {
         if (menus.isEmpty()) {
-            fail("the script opened no menu");
+            String error = lastTask == null ? null : lastTask.error();
+            fail("the script opened no menu" + (error == null ? "" : ": " + error));
         }
         return menus.get(0);
     }
