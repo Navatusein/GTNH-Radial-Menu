@@ -61,5 +61,10 @@ dependencies {
     shadowImplementation("org.luaj:luaj-jse:3.0.1")
     testImplementation("org.luaj:luaj-jse:3.0.1")
 
+    // Hodgepodge, copied into libs/ to reproduce what the pack does to keybindings, expects fastutil. In GTNH that
+    // arrives through FalsePatternLib's runtime downloader, which the dev client has no equivalent of, so the dev
+    // run takes it from Maven instead. Runtime-only and unpublished: it exists for runClient and nothing else.
+    runtimeOnlyNonPublishable("it.unimi.dsi:fastutil:8.5.18")
+
     testImplementation("junit:junit:4.13.2")
 }

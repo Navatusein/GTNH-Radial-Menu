@@ -87,8 +87,41 @@ This is the crux, and it is verified against the decompiled 1.7.10 source, not a
 - **Known gap**: `Minecraft.runTick` checks `keyBindTogglePerspective` and `keyBindSmoothCamera` *inside* the
   `while (Keyboard.next())` loop, so vanilla only asks about them when a real key event arrives — a synthetic press is
   never seen. Every other vanilla binding (`keyBindInventory`, `keyBindDrop`, `keyBindChat`, hotbar slots) is checked
-  outside the loop and works fine. `VanillaKeyEffects` applies those two directly instead. A mod that polls
-  `Keyboard.isKeyDown(kb.getKeyCode())` rather than its own binding object is likewise unreachable, permanently.
+  outside the loop and works fine. `VanillaKeyEffects` applies those two directly instead.
+
+**An injected press also holds the binding's key code in LWJGL's buffer**, through `KeyBuffer`. That was added for a
+mod in the pack rather than in theory: GTNH's Hodgepodge resynchronises *every* binding from the hardware inside
+`Minecraft.setIngameFocus` - `setKeyBindState(code, code < 256 && Keyboard.isKeyDown(code))` for each one - and
+`setIngameFocus` runs whenever a screen closes, the wheel included. Without the byte in the buffer that resync clears
+the press it finds; with it, the resync re-asserts it. It also reaches the mods that poll
+`Keyboard.isKeyDown(kb.getKeyCode())` instead of their binding, which used to be unreachable. An **unbound** binding
+is immune to all of this either way: Hodgepodge's replacement of `setKeyBindState` keeps vanilla's `if (keyCode != 0)`
+guard, so a binding with no key is never touched by the resync.
+
+**Two mods in the pack make the key buffer compulsory, and one of them hides it.** Controlling rewrites
+`getIsKeyPressed()` for any binding whose key *is* a modifier - `cir.setReturnValue(false)` unless its
+`isModifierActive()`, which for such a binding is `Keyboard.isKeyDown(LSHIFT) || isKeyDown(RSHIFT)`. `key.sneak` lives
+on Shift, so in GTNH the sneak binding ignores its own `pressed` field entirely and follows the hardware; that is why
+an injected sneak worked in dev and did nothing in the pack. And lwjgl3ify replaces LWJGL 2, so the buffer is not
+`org.lwjgl.input.Keyboard.keyDownBuffer` at all: that class is a forwarder, and the state lives in
+`org.lwjglx.input.Keyboard.sdlKeyPressedArray`, **indexed by SDL scancode** through `KeyCodes.lwjglToSdlScancode`.
+Writing at the raw key code there lands on an unrelated key. `KeyBuffer` finds whichever store exists, which is the
+single fix for three separate symptoms: Shift/Ctrl/Alt doing nothing in the pack, injected sneak doing nothing, and
+Hodgepodge clearing presses.
+
+**Sneak is not a key, it is last tick's answer.** `EntityPlayerSP.isSneaking()` returns `movementInput.sneak`, a copy
+refreshed once per tick inside the player's own update - which runs *after* the tick event the injection lives in. A
+mod reading `isSneaking()` from the `KeyInputEvent` we post therefore reads the previous tick. The keybind action's
+`sneak` option starts the sneak and defers the press by one tick for exactly that reason, and a `tap` on `key.sneak` is
+one tick long, which is invisible: use toggle or hold.
+
+**A modifier key is not a binding, and cannot be pressed like one.** `GuiScreen.isShiftKeyDown()` is
+`Keyboard.isKeyDown(42) || Keyboard.isKeyDown(54)` and nothing else, so no injected binding can answer it.
+`ModifierKeys` writes the byte into LWJGL's own `keyDownBuffer` instead - the field is private and final, which costs
+only a `setAccessible`, since nothing replaces the buffer and a byte is written into it. `Keyboard.poll()` refills it
+from the OS on every `Display.update()`, so a held modifier is written again every tick; that is also what makes it
+safe, because nothing can be jammed down for longer than a frame and a physically held key comes back on the next
+poll. It does not make the player sneak - `key.sneak` is a binding and already has an action.
 
 **Some mods never look past the key code.** JourneyMap's `Constants.isPressed` returns false outright when
 `getKeyCode() == 0` and never reads the press counter, so its zoom and minimap keys were unreachable while its map
