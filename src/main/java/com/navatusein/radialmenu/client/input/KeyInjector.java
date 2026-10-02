@@ -98,11 +98,32 @@ public final class KeyInjector {
         KeyBindingAccessor accessor = access(binding);
         accessor.radialmenu$setPressed(true);
         accessor.radialmenu$setPressTime(accessor.radialmenu$getPressTime() + 1);
+        holdKeyCode(binding);
     }
 
     /** Marks the binding as held without counting a press - for keeping a toggle or hold down. */
     public static void hold(KeyBinding binding) {
         access(binding).radialmenu$setPressed(true);
+        holdKeyCode(binding);
+    }
+
+    /**
+     * Says the binding's own key is down, to everything that asks the keyboard instead of the binding.
+     *
+     * <p>
+     * Two readers need this, and the second is why it is not optional. A mod that polls
+     * {@code Keyboard.isKeyDown(kb.getKeyCode())} rather than its own binding object was unreachable before - including
+     * through the code lent to an unbound binding, which existed but was never down. And GTNH's Hodgepodge
+     * resynchronises <em>every</em> binding from the hardware inside {@code Minecraft.setIngameFocus}, which runs each
+     * time a screen closes: it reads {@code Keyboard.isKeyDown(code)} and writes the answer into the binding, so an
+     * injected press was being cleared by the act of closing the wheel. With the code held in the buffer, that same
+     * resynchronisation re-asserts the press instead.
+     *
+     * <p>
+     * Written again on every {@link #hold}, because the real keyboard poll clears the buffer on every frame.
+     */
+    private static void holdKeyCode(KeyBinding binding) {
+        KeyBuffer.set(binding.getKeyCode(), true);
     }
 
     /** Clears both fields, exactly as vanilla's private {@code unpressKey()} does. */
@@ -110,6 +131,10 @@ public final class KeyInjector {
         KeyBindingAccessor accessor = access(binding);
         accessor.radialmenu$setPressed(false);
         accessor.radialmenu$setPressTime(0);
+        // Cleared outright rather than "unless the player is holding it": we wrote that byte ourselves, so asking
+        // whether the key is down would only read our own answer back. A real key reappears on the next poll, which is
+        // at most a frame away.
+        KeyBuffer.set(binding.getKeyCode(), false);
         returnKeyCode(binding);
     }
 

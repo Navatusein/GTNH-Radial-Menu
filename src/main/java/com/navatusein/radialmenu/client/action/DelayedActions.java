@@ -22,8 +22,21 @@ public final class DelayedActions {
         Object owner;
         ActionSpec spec;
         String rawCommand;
-        int ticksRemaining;
+
+        /** The tick this comes due on, counted from {@link #tick} rather than aged by a decrement. */
+        long dueTick;
     }
+
+    /**
+     * Ticks since the client started, as far as this queue is concerned.
+     *
+     * <p>
+     * Here because ageing by a decrement loses a tick: scheduling happens inside {@code runPending}, which then ages
+     * the queue in the same breath, so an action asked to wait one tick ran immediately. That is invisible for a chain
+     * spacing commands out and fatal for the sneak option, where the whole point of the tick is that the player's own
+     * update happens in it.
+     */
+    private static long tick;
 
     private static final List<Entry> PENDING = new ArrayList<>();
 
@@ -34,7 +47,7 @@ public final class DelayedActions {
         Entry entry = new Entry();
         entry.owner = owner;
         entry.spec = spec;
-        entry.ticksRemaining = Math.max(0, delayTicks);
+        entry.dueTick = tick + Math.max(0, delayTicks);
         PENDING.add(entry);
     }
 
@@ -43,7 +56,7 @@ public final class DelayedActions {
         Entry entry = new Entry();
         entry.owner = owner;
         entry.rawCommand = command;
-        entry.ticksRemaining = Math.max(0, delayTicks);
+        entry.dueTick = tick + Math.max(0, delayTicks);
         PENDING.add(entry);
     }
 
@@ -70,6 +83,18 @@ public final class DelayedActions {
      *
      * @return whether anything came due
      */
+    /**
+     * Moves the clock on, before anything that might schedule has run.
+     *
+     * <p>
+     * Separate from {@link #onClientTick()} because of where the scheduling happens: an action runs from inside the
+     * tick's own queue, so a counter advanced after that queue drains is advanced <em>past</em> the entry that was just
+     * added, and "wait one tick" comes due immediately. Numbering the tick first is what makes the wait real.
+     */
+    public static void beginTick() {
+        tick++;
+    }
+
     public static boolean onClientTick() {
         if (PENDING.isEmpty()) {
             return false;
@@ -79,7 +104,7 @@ public final class DelayedActions {
         Iterator<Entry> iterator = PENDING.iterator();
         while (iterator.hasNext()) {
             Entry entry = iterator.next();
-            if (--entry.ticksRemaining <= 0) {
+            if (tick >= entry.dueTick) {
                 due.add(entry);
                 iterator.remove();
             }

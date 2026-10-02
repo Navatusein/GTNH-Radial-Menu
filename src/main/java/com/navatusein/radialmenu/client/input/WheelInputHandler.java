@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ServerData;
 
 import com.navatusein.radialmenu.client.action.ActionExecutors;
+import com.navatusein.radialmenu.client.action.SneakDiagnostics;
 import com.navatusein.radialmenu.client.action.WithoutScreen;
 import com.navatusein.radialmenu.client.gui.GuiRadialWheel;
 import com.navatusein.radialmenu.client.gui.GuiStack;
@@ -111,9 +112,31 @@ public class WheelInputHandler {
         WithoutScreen.beginTick();
     }
 
+    /**
+     * Brackets the tick from the outside, for the diagnostic only.
+     *
+     * <p>
+     * Three readings pin down where a press is being lost: at the very start of a tick it is whatever survived the one
+     * before, at the very start of the end phase it is whatever the tick body left, and the reading at {@code LOW} is
+     * what the other mods' own end-of-tick handlers left behind.
+     */
+    @SubscribeEvent(priority = EventPriority.HIGHEST)
+    public void onTickProbe(TickEvent.ClientTickEvent event) {
+        if (!KeybindStateTracker.hasHeld()) {
+            return;
+        }
+        SneakDiagnostics.log(
+            event.phase == TickEvent.Phase.START ? "start first" : "end first",
+            Minecraft.getMinecraft().gameSettings.keyBindSneak);
+    }
+
     @SubscribeEvent(priority = EventPriority.LOW)
     public void onTickLast(TickEvent.ClientTickEvent event) {
         WithoutScreen.endTick(event.phase == TickEvent.Phase.START);
+        if (event.phase == TickEvent.Phase.END && KeybindStateTracker.hasHeld()) {
+            // After the world has ticked, so the player's own movement update has already read whatever it reads.
+            SneakDiagnostics.log("end last", Minecraft.getMinecraft().gameSettings.keyBindSneak);
+        }
     }
 
     /**

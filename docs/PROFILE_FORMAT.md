@@ -166,12 +166,21 @@ The reason the mod exists: this works on a keybinding that has **no key assigned
 | `category` | no | Its category, e.g. `key.categories.inventory`. Only needed to tell apart two mods that registered the same description. |
 | `mode` | no | `"tap"` (default), `"toggle"`, `"hold"`. |
 | `holdTicks` | no | How long `hold` keeps the key down. Default `"20"` — 20 ticks is one second. |
+| `shift`, `ctrl`, `alt` | no | `"true"` holds that modifier down for as long as the binding is pressed. Default `"false"`. |
+| `sneak` | no | `"true"` starts sneaking, then presses the binding a tick later. Default `"false"`. |
 
 ```json
 { "type": "keybind", "params": { "binding": "key.sneak", "mode": "toggle" } }
 ```
 
 `tap` presses once. `toggle` holds the key down until the entry is chosen again. `hold` holds it for `holdTicks`.
+
+The modifiers are for mods that read the keyboard rather than a keybinding — `GuiScreen.isShiftKeyDown()` asks LWJGL
+directly, so no binding, injected or otherwise, can tell it Shift is down.
+
+`sneak` is the other half of that, and a different thing entirely: it holds the sneak binding and delays the press by a
+tick, because `isSneaking()` reads a copy the player updates once per tick. Use it for mods that ask whether you are
+sneaking - Backpack puts the backpack on your back that way - and `shift` for mods that ask about the key.
 
 **Vanilla keybinding ids** (1.7.10, read from the game's own code):
 
