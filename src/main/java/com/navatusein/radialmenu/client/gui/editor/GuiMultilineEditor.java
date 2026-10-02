@@ -3,6 +3,7 @@ package com.navatusein.radialmenu.client.gui.editor;
 import java.util.ArrayList;
 import java.util.List;
 
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
@@ -11,6 +12,7 @@ import org.lwjgl.input.Keyboard;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
+import com.navatusein.radialmenu.client.gui.ui.UiDragReorder;
 import com.navatusein.radialmenu.client.gui.ui.UiIconButton;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 
@@ -34,10 +36,15 @@ public class GuiMultilineEditor extends UiScreen {
     }
 
     private static final int ID_ADD = 1;
-    private static final int ID_REMOVE_BASE = 200;
+
+    /** Numbered far apart, like the chain's step controls: a long list must not reach into the next range. */
+    private static final int ID_REMOVE_BASE = 1000;
+    private static final int ID_UP_BASE = 2000;
+    private static final int ID_DOWN_BASE = 3000;
 
     private static final int NUMBER_WIDTH = 16;
     private static final int REMOVE_WIDTH = 20;
+    private static final int ARROW = 18;
 
     private final String titleKey;
     private final Result result;
@@ -51,6 +58,11 @@ public class GuiMultilineEditor extends UiScreen {
 
     /** Focused after the next rebuild, so a line added by Enter is the one you carry on typing into. */
     private int focusLine = -1;
+
+    /** Top of the first line row; the rest follow one step apart. */
+    private int rowTop;
+
+    private final UiDragReorder drag = new UiDragReorder();
 
     public GuiMultilineEditor(String titleKey, String initialText, Result result) {
         this.titleKey = titleKey;
@@ -93,9 +105,13 @@ public class GuiMultilineEditor extends UiScreen {
         fieldLineIndex.clear();
 
         int left = contentLeft();
-        int fieldLeft = left + NUMBER_WIDTH;
-        int fieldWidth = contentRight() - fieldLeft - REMOVE_WIDTH - Ui.GAP;
+        int fieldLeft = left + UiDragReorder.GRIP + NUMBER_WIDTH;
+        int removeLeft = contentRight() - REMOVE_WIDTH;
+        int downLeft = removeLeft - ARROW - 2;
+        int upLeft = downLeft - ARROW - 2;
+        int fieldWidth = upLeft - Ui.GAP - fieldLeft;
         int y = scrolledTop();
+        rowTop = y;
 
         for (int i = 0; i < lines.size(); i++) {
             // Rows that do not fit are not built at all. Creating them and hiding them afterwards left buttons and
@@ -115,14 +131,15 @@ public class GuiMultilineEditor extends UiScreen {
             fields.add(field);
             fieldLineIndex.add(Integer.valueOf(i));
 
+            GuiButton up = new UiIconButton(ID_UP_BASE + i, upLeft, y, ARROW, Ui.ROW, UiIconButton.Icon.UP);
+            GuiButton down = new UiIconButton(ID_DOWN_BASE + i, downLeft, y, ARROW, Ui.ROW, UiIconButton.Icon.DOWN);
+            up.enabled = i > 0;
+            down.enabled = i < lines.size() - 1;
+            this.buttonList.add(up);
+            this.buttonList.add(down);
+
             this.buttonList.add(
-                new UiIconButton(
-                    ID_REMOVE_BASE + i,
-                    contentRight() - REMOVE_WIDTH,
-                    y,
-                    REMOVE_WIDTH,
-                    Ui.ROW,
-                    UiIconButton.Icon.CROSS));
+                new UiIconButton(ID_REMOVE_BASE + i, removeLeft, y, REMOVE_WIDTH, Ui.ROW, UiIconButton.Icon.CROSS));
             y += Ui.STEP;
         }
         focusLine = -1;
@@ -160,6 +177,16 @@ public class GuiMultilineEditor extends UiScreen {
             return;
         }
 
+        // Highest base first: an id belongs to the last range it is above, the same order the chain's steps use.
+        if (button.id >= ID_DOWN_BASE) {
+            moveLine(button.id - ID_DOWN_BASE, 1);
+            return;
+        }
+        if (button.id >= ID_UP_BASE) {
+            moveLine(button.id - ID_UP_BASE, -1);
+            return;
+        }
+
         int index = button.id - ID_REMOVE_BASE;
         if (index >= 0 && index < lines.size()) {
             captureFields();
@@ -169,6 +196,25 @@ public class GuiMultilineEditor extends UiScreen {
             }
             requestRebuild();
         }
+    }
+
+    /**
+     * Swaps a line with its neighbour.
+     *
+     * <p>
+     * The fields are read back first: they are the source of truth while the screen is open, so a line moved before
+     * being captured would arrive at its new place holding what it said when the screen was last built.
+     */
+    private void moveLine(int index, int direction) {
+        int target = index + direction;
+        if (index < 0 || index >= lines.size() || target < 0 || target >= lines.size()) {
+            return;
+        }
+        captureFields();
+        lines.set(index, lines.set(target, lines.get(index)));
+        // The moved line keeps the focus, so a line can be walked several places without clicking it again.
+        focusLine = target;
+        requestRebuild();
     }
 
     /** Adds a line at a position and scrolls it into view, so Enter at the bottom of a long list is not a dead end. */
@@ -224,14 +270,67 @@ public class GuiMultilineEditor extends UiScreen {
         int left = contentLeft();
         for (int i = 0; i < fields.size(); i++) {
             GuiTextField field = fields.get(i);
-            String number = (fieldLineIndex.get(i)
-                .intValue() + 1) + ".";
+            int line = fieldLineIndex.get(i)
+                .intValue();
+            boolean held = drag.isDragging() && drag.grabbedRow() == line;
+            if (held) {
+                Gui.drawRect(left, field.yPosition - 3, contentRight(), field.yPosition + Ui.ROW - 3, Ui.ROW_SELECTED);
+            }
+            UiDragReorder.drawGrip(left, field.yPosition - 3, Ui.ROW, held);
+
+            String number = (line + 1) + ".";
             this.fontRendererObj.drawString(
                 number,
-                left + NUMBER_WIDTH - 4 - this.fontRendererObj.getStringWidth(number),
+                left + UiDragReorder.GRIP + NUMBER_WIDTH - 4 - this.fontRendererObj.getStringWidth(number),
                 field.yPosition + 3,
                 Ui.TEXT_MUTED);
             field.drawTextBox();
+        }
+
+        drag.drawInsertion(rows(), contentLeft(), contentRight());
+        scrollTowardsDrag();
+    }
+
+    /**
+     * Where the line rows are.
+     *
+     * <p>
+     * Computed from the first row's top rather than read off the fields, because only the visible rows have fields and
+     * a drag has to be able to aim at a line that is scrolled off the end.
+     */
+    private UiDragReorder.Rows rows() {
+        return new UiDragReorder.Rows() {
+
+            @Override
+            public int count() {
+                return lines.size();
+            }
+
+            @Override
+            public int top(int row) {
+                return rowTop + row * Ui.STEP;
+            }
+
+            @Override
+            public int height() {
+                return Ui.ROW;
+            }
+        };
+    }
+
+    private void scrollTowardsDrag() {
+        if (!drag.isDragging()) {
+            return;
+        }
+        int overshoot = drag.overshoot(rows());
+        if (overshoot == 0) {
+            return;
+        }
+        int next = Math.max(0, Math.min(maxScroll(), scrollOffset + Math.max(-6, Math.min(6, overshoot))));
+        if (next != scrollOffset) {
+            beforeScroll();
+            scrollOffset = next;
+            requestRebuild();
         }
     }
 
@@ -244,6 +343,11 @@ public class GuiMultilineEditor extends UiScreen {
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int button) {
+        // Before super, and before the fields: a press on a grip is a grip, not a click into the line beside it.
+        if (button == 0 && isInsideViewport(mouseY) && drag.press(mouseX, mouseY, contentLeft(), rows())) {
+            captureFields();
+            return;
+        }
         super.mouseClicked(mouseX, mouseY, button);
         // A field clipped at the panel edge still answers to clicks on the part that was cut away.
         if (!isInsideViewport(mouseY)) {
@@ -252,6 +356,27 @@ public class GuiMultilineEditor extends UiScreen {
         for (GuiTextField field : fields) {
             field.mouseClicked(mouseX, mouseY, button);
         }
+    }
+
+    @Override
+    protected void mouseClickMove(int mouseX, int mouseY, int mouseButton, long timeSinceClick) {
+        drag.moveTo(mouseY);
+        super.mouseClickMove(mouseX, mouseY, mouseButton, timeSinceClick);
+    }
+
+    @Override
+    protected void mouseMovedOrUp(int mouseX, int mouseY, int which) {
+        if (which == 0) {
+            int from = drag.grabbedRow();
+            int to = drag.release(rows());
+            if (to >= 0 && to != from && from >= 0 && from < lines.size()) {
+                // Captured on the way in, so what was typed into the dragged line travels with it.
+                lines.add(to, lines.remove(from));
+                focusLine = to;
+                requestRebuild();
+            }
+        }
+        super.mouseMovedOrUp(mouseX, mouseY, which);
     }
 
     @Override
