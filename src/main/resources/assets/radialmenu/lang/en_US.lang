@@ -184,3 +184,4 @@ radialmenu.script.position=Ln %d, Col %d - %d lines
 radialmenu.script.snippets.show=Show API
 radialmenu.script.snippets.hide=Hide API
 radialmenu.script.snippets.tip=Click an entry to write it into the script where the caret is.
+radialmenu.action.profileSwitch.next=Next profile
