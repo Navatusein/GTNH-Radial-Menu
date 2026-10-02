@@ -60,4 +60,11 @@ public class RadialMenuConfig {
     @Config.DefaultBoolean(true)
     @Config.Order(7)
     public static boolean enableScripts;
+
+    @Config.Comment("Log what the game believes about key and sneak state on every injected press: our own byte, "
+        + "LWJGL's answer, the binding's answer, and what a mod asking \"is the player sneaking\" would get. For "
+        + "working out why one particular mod does not react. Noisy; leave it off unless you are chasing something.")
+    @Config.DefaultBoolean(false)
+    @Config.Order(8)
+    public static boolean logKeyState;
 }

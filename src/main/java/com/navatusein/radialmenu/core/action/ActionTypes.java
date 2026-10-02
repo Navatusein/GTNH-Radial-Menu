@@ -67,6 +67,12 @@ public final class ActionTypes {
      */
     public static final String PARAM_CATEGORY = "category";
     public static final String PARAM_MODE = "mode";
+    /** Modifier keys held while the binding is pressed, for mods that read the keyboard rather than a binding. */
+    public static final String PARAM_SHIFT = "shift";
+    public static final String PARAM_CTRL = "ctrl";
+    public static final String PARAM_ALT = "alt";
+    /** Sneak held alongside the binding, for mods that check isSneaking rather than a key. */
+    public static final String PARAM_SNEAK = "sneak";
     public static final String PARAM_HOLD_TICKS = "holdTicks";
     public static final String PARAM_PROFILE = "profile";
     public static final String PARAM_COMMAND = "command";
@@ -140,7 +146,13 @@ public final class ActionTypes {
                 ActionField.keybindRef(PARAM_BINDING, "radialmenu.action.keybind.binding")
                     .required(),
                 ActionField.enumeration(PARAM_MODE, "radialmenu.action.keybind.mode", "tap", "tap", "toggle", "hold"),
-                ActionField.integer(PARAM_HOLD_TICKS, "radialmenu.action.keybind.holdTicks", 20)));
+                ActionField.integer(PARAM_HOLD_TICKS, "radialmenu.action.keybind.holdTicks", 20),
+                // Held alongside the binding, for the mods that read a modifier from the keyboard rather than from a
+                // keybinding of their own - see Modifiers.
+                ActionField.bool(PARAM_SHIFT, "radialmenu.action.keybind.shift", false),
+                ActionField.bool(PARAM_CTRL, "radialmenu.action.keybind.ctrl", false),
+                ActionField.bool(PARAM_ALT, "radialmenu.action.keybind.alt", false),
+                ActionField.bool(PARAM_SNEAK, "radialmenu.action.keybind.sneak", false)));
 
         register(
             new ActionType(
