@@ -1,5 +1,6 @@
 package com.navatusein.radialmenu.client.gui.ui;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -10,6 +11,7 @@ import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.resources.I18n;
+import net.minecraft.util.EnumChatFormatting;
 
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
@@ -420,11 +422,32 @@ public abstract class UiScreen extends GuiScreen {
                 // Wrapped rather than run out as one line: a tooltip explaining a setting is a sentence, and a
                 // sentence drawn unbroken reaches the far edge of the screen from a button in the middle of it.
                 @SuppressWarnings("unchecked")
-                List<String> lines = this.fontRendererObj.listFormattedStringToWidth(text, TOOLTIP_WIDTH);
-                drawHoveringText(lines, mouseX, mouseY, this.fontRendererObj);
+                List<String> wrapped = this.fontRendererObj.listFormattedStringToWidth(text, TOOLTIP_WIDTH);
+                drawHoveringText(allWhite(wrapped), mouseX, mouseY, this.fontRendererObj);
             }
             return;
         }
+    }
+
+    /**
+     * Says white at the start of every line of a tooltip.
+     *
+     * <p>
+     * Vanilla draws each line of a tooltip white already, so this changes nothing on its own. It is for the packs:
+     * a mod that restyles tooltips greys everything after the first line, which is right for an item - a name and then
+     * its description - and wrong for one sentence of ours wrapped across three lines, where the split is wherever the
+     * width ran out. A colour written into the string wins over the one the drawing code chose, so the sentence reads
+     * as one sentence wherever it is shown.
+     *
+     * <p>
+     * Written first rather than instead: a line that carries formatting of its own still applies it afterwards.
+     */
+    private static List<String> allWhite(List<String> lines) {
+        List<String> coloured = new ArrayList<>(lines.size());
+        for (String line : lines) {
+            coloured.add(EnumChatFormatting.WHITE + line);
+        }
+        return coloured;
     }
 
     /** Drawn after the buttons, for anything that has to sit on top of one. */

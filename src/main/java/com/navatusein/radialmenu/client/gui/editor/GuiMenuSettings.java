@@ -148,7 +148,9 @@ public class GuiMenuSettings extends UiScreen {
         y += Ui.STEP;
 
         ActionType type = ActionTypes.get(ActionTypes.SUBMENU);
-        for (ActionField field : type.fields) {
+        for (int fieldIndex = 0; fieldIndex < type.fields.size(); fieldIndex++) {
+            ActionField field = type.fields.get(fieldIndex);
+            ActionField nextField = fieldIndex + 1 < type.fields.size() ? type.fields.get(fieldIndex + 1) : null;
             int index = fields.size();
             fields.add(field);
             tooltip(ID_FIELD_BASE + index, describe(field.tooltipKey()));
@@ -216,7 +218,7 @@ public class GuiMenuSettings extends UiScreen {
                 input.setText(current == null ? "" : current);
                 inputs.add(input);
             }
-            y += Ui.STEP;
+            y += FieldControls.stepAfter(field, nextField);
             if (FieldControls.standsApart(field)) {
                 y += Ui.GAP;
             }

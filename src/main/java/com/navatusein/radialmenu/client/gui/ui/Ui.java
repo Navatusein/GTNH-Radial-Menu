@@ -25,6 +25,15 @@ public final class Ui {
 
     public static final int STEP = ROW + GAP;
 
+    /**
+     * Step between rows that belong together - the modifier checkboxes, say.
+     *
+     * <p>
+     * A pixel rather than nothing: rows that touch read as one tall control, and rows a gap apart read as separate
+     * settings. Never below {@link #ROW}, or two rows would overlap and so would what they answer to.
+     */
+    public static final int GROUP_STEP = ROW + 1;
+
     /** Padding inside a framed panel. */
     public static final int PAD = 8;
 

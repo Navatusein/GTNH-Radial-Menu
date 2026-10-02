@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiTextField;
 import net.minecraft.client.resources.I18n;
@@ -15,11 +16,11 @@ import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
 import com.navatusein.radialmenu.client.gui.ui.UiCheckbox;
 import com.navatusein.radialmenu.client.gui.ui.UiColorButton;
+import com.navatusein.radialmenu.client.gui.ui.UiDragReorder;
 import com.navatusein.radialmenu.client.gui.ui.UiIconButton;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.gui.ui.UiTabButton;
 import com.navatusein.radialmenu.client.profile.ProfileManager;
-import com.navatusein.radialmenu.client.profile.ProfileStorage;
 import com.navatusein.radialmenu.client.script.ScriptHost;
 import com.navatusein.radialmenu.config.ColorConfig;
 import com.navatusein.radialmenu.core.action.ActionField;
@@ -105,6 +106,11 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
     private int stepsSectionTop = -1;
     private int stepCount;
 
+    /** Top of the first step row. The rest follow at one {@link Ui#STEP} each, which is how they were laid out. */
+    private int stepRowTop;
+
+    private final UiDragReorder stepDrag = new UiDragReorder();
+
     /** Which action types this editor offers. */
     protected abstract List<ActionType> offeredTypes();
 
@@ -137,12 +143,14 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
             return y;
         }
 
-        for (ActionField field : selected.fields) {
+        for (int i = 0; i < selected.fields.size(); i++) {
+            ActionField field = selected.fields.get(i);
+            ActionField next = i + 1 < selected.fields.size() ? selected.fields.get(i + 1) : null;
             if (FieldControls.standsApart(field)) {
                 y += Ui.GAP;
             }
             addFieldControl(field, controlLeft, controlWidth, y);
-            y += Ui.STEP;
+            y += FieldControls.stepAfter(field, next);
             if (FieldControls.standsApart(field)) {
                 y += Ui.GAP;
             }
@@ -284,12 +292,20 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
         int upLeft = downLeft - ARROW - 2;
         int rowWidth = upLeft - Ui.GAP - left;
 
+        stepRowTop = y;
+
         for (int i = 0; i < steps.size(); i++) {
             // The whole row opens the step. A chain is read as a list of things that happen, so the thing it says is
             // also the thing you click.
             String label = (i + 1) + ". " + ActionSummary.of(steps.get(i));
-            this.buttonList
-                .add(new GuiButton(ID_STEP_EDIT_BASE + i, left, y, rowWidth, Ui.ROW, Ui.fit(label, rowWidth - 8)));
+            this.buttonList.add(
+                new GuiButton(
+                    ID_STEP_EDIT_BASE + i,
+                    left + UiDragReorder.GRIP + 2,
+                    y,
+                    rowWidth - UiDragReorder.GRIP - 2,
+                    Ui.ROW,
+                    Ui.fit(label, rowWidth - UiDragReorder.GRIP - 10)));
             tooltip(ID_STEP_EDIT_BASE + i, describe("radialmenu.steps.edit.tip"));
 
             GuiButton up = new UiIconButton(ID_STEP_UP_BASE + i, upLeft, y, ARROW, Ui.ROW, UiIconButton.Icon.UP);
@@ -534,8 +550,10 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
         if (remembered != null) {
             return remembered;
         }
-        return ActionTypes.get(typeId)
+        ActionSpec fresh = ActionTypes.get(typeId)
             .newSpec();
+        FieldControls.applyClientDefaults(fresh);
+        return fresh;
     }
 
     /** A colour row: the value read live from the spec, beside a square of what it comes out as. */
@@ -625,7 +643,7 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
                 spec.set(key, next(field.options, current));
                 break;
             case PROFILE_REF:
-                spec.set(key, next(ProfileStorage.listProfileNames(), current));
+                spec.set(key, next(FieldControls.profileOptions(), current));
                 break;
             default:
                 return;
@@ -692,6 +710,77 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
             this.fontRendererObj
                 .drawString(I18n.format("radialmenu.steps.empty"), left, stepsSectionTop + 18, Ui.TEXT_MUTED);
         }
+
+        for (int i = 0; i < stepCount; i++) {
+            int top = stepRows().top(i);
+            if (!isVisibleRow(top)) {
+                continue;
+            }
+            if (stepDrag.isDragging() && stepDrag.grabbedRow() == i) {
+                Gui.drawRect(left, top, contentRight(), top + Ui.ROW, Ui.ROW_SELECTED);
+            }
+            UiDragReorder.drawGrip(left, top, Ui.ROW, stepDrag.isDragging() && stepDrag.grabbedRow() == i);
+        }
+        stepDrag.drawInsertion(stepRows(), left, contentRight());
+        scrollTowardsDrag();
+    }
+
+    /** Where the step rows are, for the drag gesture. One pitch, so the arithmetic is the layout's own. */
+    private UiDragReorder.Rows stepRows() {
+        return new UiDragReorder.Rows() {
+
+            @Override
+            public int count() {
+                return stepCount;
+            }
+
+            @Override
+            public int top(int row) {
+                return stepRowTop + row * Ui.STEP;
+            }
+
+            @Override
+            public int height() {
+                return Ui.ROW;
+            }
+        };
+    }
+
+    /** Scrolls while a step is held past the edge of the panel, so a long chain can be reordered end to end. */
+    private void scrollTowardsDrag() {
+        if (!stepDrag.isDragging()) {
+            return;
+        }
+        int overshoot = stepDrag.overshoot(stepRows());
+        if (overshoot == 0) {
+            return;
+        }
+        int next = Math.max(0, Math.min(maxScroll(), scrollOffset + Math.max(-6, Math.min(6, overshoot))));
+        if (next != scrollOffset) {
+            beforeScroll();
+            scrollOffset = next;
+            requestRebuild();
+        }
+    }
+
+    /**
+     * Moves a step to where it was dropped, a place at a time.
+     *
+     * <p>
+     * Through {@link ActionSteps#move} rather than by cutting and inserting, so a drag is exactly what pressing the
+     * arrow that many times would do - and there is one definition of what moving a step means.
+     */
+    private void dropStep(int from, int to) {
+        List<ActionSpec> steps = spec.stepsOrEmpty();
+        if (from < 0 || to < 0 || from == to || from >= steps.size() || to >= steps.size()) {
+            return;
+        }
+        int direction = to > from ? 1 : -1;
+        for (int at = from; at != to; at += direction) {
+            if (!ActionSteps.move(steps, at, direction)) {
+                break;
+            }
+        }
     }
 
     /** @return the translated text, or null when the key has no string - so a missing tooltip shows nothing */
@@ -710,6 +799,10 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int button) {
+        // Before super: a press on a grip must not reach the row button underneath, which opens the step.
+        if (button == 0 && isInsideViewport(mouseY) && stepDrag.press(mouseX, mouseY, contentLeft(), stepRows())) {
+            return;
+        }
         super.mouseClicked(mouseX, mouseY, button);
         // A field clipped at the panel edge still answers to clicks on the part that was cut away.
         if (!isInsideViewport(mouseY)) {
@@ -720,6 +813,26 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
                 input.mouseClicked(mouseX, mouseY, button);
             }
         }
+    }
+
+    @Override
+    protected void mouseClickMove(int mouseX, int mouseY, int mouseButton, long timeSinceClick) {
+        stepDrag.moveTo(mouseY);
+        super.mouseClickMove(mouseX, mouseY, mouseButton, timeSinceClick);
+    }
+
+    @Override
+    protected void mouseMovedOrUp(int mouseX, int mouseY, int which) {
+        if (which == 0) {
+            int from = stepDrag.grabbedRow();
+            int to = stepDrag.release(stepRows());
+            if (to >= 0 && to != from) {
+                captureInputs();
+                dropStep(from, to);
+                requestRebuild();
+            }
+        }
+        super.mouseMovedOrUp(mouseX, mouseY, which);
     }
 
     @Override
