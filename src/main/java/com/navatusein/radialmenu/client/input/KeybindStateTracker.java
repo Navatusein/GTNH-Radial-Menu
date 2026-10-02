@@ -63,11 +63,6 @@ public final class KeybindStateTracker {
         return true;
     }
 
-    /** Whether anything is being held at all - the diagnostic only speaks while there is something to say. */
-    public static boolean hasHeld() {
-        return !HELD.isEmpty();
-    }
-
     /** True while an entry is holding this binding down - the editor shows it, and toggles render as active. */
     public static boolean isActive(KeyBinding binding) {
         return HELD.containsKey(binding);
