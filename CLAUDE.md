@@ -429,6 +429,28 @@ The `chunk` table is also the one corner of the API whose calls do not suspend, 
 fields reach Lua through a metatable, so they are read at the moment the script looks - a script alive across a
 teleport, or simply across a mouse movement, must not be holding a number from when it started.
 
+**A question is a field, a change is a request.** Reading - position, health, the crosshair's target, the
+inventory, a stored value - is answered straight off `ScriptContext`, because the client thread is parked inside
+`resume` while the script runs and the answer is the same whichever side reads it. Anything that *changes* something -
+`store.set`, `prompt` - goes through a `ScriptRequest`, because only the host's thread may touch a file or a screen.
+That is the whole rule, and it is why `store.get` costs nothing while `store.set` goes round the loop.
+
+**A screen-shaped request blocks like a menu, and reads its answer before the screen's absence.** `prompt` follows
+`openOrResolveMenu` exactly: open, return false, be asked again next tick. Confirming is what closes the box, so
+checking "did the screen go away" before "is there an answer" would turn every answer into a cancellation - the same
+ordering trap the wheel already documents. A screen gone with nothing typed is a cancellation however it went, and
+`nil` is what a script already tests for after a dismissed menu.
+
+**`ScriptItem` and `LookTarget` exist so `ItemStack` does not cross the line.** An item stack is a Minecraft type
+with NBT hanging off it; letting one into `core` would put the whole item API inside the sandbox. Four fields - id,
+damage, count, name - are what a script actually does with an item, plus a pre-spelled `icon` so a listing can be
+handed to `menu.open` unchanged. `getDisplayName` is called inside a guard, because it is the item's own code and a
+modded one throws on a stack built outside the world it expects - the same hazard `IconRenderer` catches.
+
+**The store is strings, shared, and flushed once a tick.** Shared because two entries running the same script want
+the same value; strings because a store that remembered types would need an opinion about what a Lua table is;
+flushed on the tick rather than per write because a script may set ten keys in a row and that should cost one file.
+
 **A field the editor does not know about is a field that does not highlight.** `LuaSyntax.MEMBERS` is what colours
 an API call in the script editor, and `ScriptSnippetsTest` checks every snippet against it - so a new member of
 `player` is added in three places or the test says so.

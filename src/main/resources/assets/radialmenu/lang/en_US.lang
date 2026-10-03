@@ -55,6 +55,7 @@ radialmenu.icons.items=Items
 radialmenu.icons.sprites=Sprites
 radialmenu.icons.effects=Effects
 radialmenu.icons.files=My PNGs
+radialmenu.script.prompt=Type a value
 radialmenu.icons.players=Heads
 radialmenu.icons.noMatches=Nothing matches that search
 radialmenu.icons.noPlayers=Type a player name, or stand near someone to learn their head

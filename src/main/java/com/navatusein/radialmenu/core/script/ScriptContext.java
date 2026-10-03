@@ -1,5 +1,7 @@
 package com.navatusein.radialmenu.core.script;
 
+import java.util.List;
+
 import com.navatusein.radialmenu.core.model.AccentCoefficients;
 
 /**
@@ -36,6 +38,45 @@ public interface ScriptContext {
     double yaw();
 
     double pitch();
+
+    /** Hearts, as the game counts them: 20 is full. */
+    double health();
+
+    /** Hunger, 0 to 20. */
+    int food();
+
+    /** Breath left under water, in ticks, 300 when full. */
+    int air();
+
+    /** What is in the player's hand, or null when it is empty. */
+    ScriptItem heldItem();
+
+    /**
+     * The player's own inventory, hotbar included, empty slots left out.
+     *
+     * <p>
+     * A copy rather than a view: the script reads it on its own thread, and a list that changed underneath it while
+     * it was walking it would be a crash in somebody's menu rather than a stale number.
+     */
+    List<ScriptItem> inventory();
+
+    /** What the crosshair is on, or null for thin air. */
+    LookTarget lookingAt();
+
+    /** The world's time of day in ticks, counting from the morning the world began. */
+    long worldTime();
+
+    /** The server's address, or the name of the save in single player. */
+    String worldName();
+
+    /**
+     * A value the player's scripts stored under this key, or null.
+     *
+     * <p>
+     * Reading is a question, so it is answered here; writing changes a file and goes through a request, which is
+     * what keeps the one thread that may touch the disk the same one that touches everything else.
+     */
+    String storeGet(String key);
 
     /**
      * How far each colour lands from a chosen accent.
