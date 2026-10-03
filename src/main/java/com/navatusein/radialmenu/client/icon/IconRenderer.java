@@ -46,7 +46,13 @@ public final class IconRenderer {
 
     private IconRenderer() {}
 
-    /** Draws a 16x16 icon with its top-left corner at the given position. */
+    /**
+     * Draws a 16x16 icon with its top-left corner at the given position.
+     *
+     * <p>
+     * Sixteen, not the size the wheel is configured with: the callers of this one are the editors, whose cells are
+     * measured in {@code Ui} and have nothing to do with how large the player wants icons in the world.
+     */
     public static void draw(IconSpec icon, int x, int y) {
         draw(icon, x, y, ICON_SIZE);
     }
@@ -57,7 +63,7 @@ public final class IconRenderer {
         }
         switch (icon.kind) {
             case ITEM:
-                drawItem(icon, x, y);
+                drawItem(icon, x, y, size);
                 break;
             case SPRITE:
                 drawSprite(icon, x, y, size);
@@ -73,7 +79,7 @@ public final class IconRenderer {
         }
     }
 
-    private static void drawItem(IconSpec icon, int x, int y) {
+    private static void drawItem(IconSpec icon, int x, int y, int size) {
         if (UNRENDERABLE.contains(key(icon))) {
             return;
         }
@@ -85,6 +91,17 @@ public final class IconRenderer {
 
         GL11.glPushMatrix();
         GL11.glEnable(GL11.GL_DEPTH_TEST);
+
+        // The item renderer draws sixteen pixels square and takes no size, so the size is in the matrix instead:
+        // moved to where the icon goes, scaled, and then drawn at the origin. Uniformly, including the depth axis,
+        // because a block is geometry rather than a sprite and squashing only two of its axes would shear it.
+        float scale = size / (float) ICON_SIZE;
+        if (scale != 1.0F) {
+            GL11.glTranslatef(x, y, 0.0F);
+            GL11.glScalef(scale, scale, scale);
+            x = 0;
+            y = 0;
+        }
         RenderHelper.enableGUIStandardItemLighting();
 
         // The two calls that decide whether a block model comes out lit, copied from GuiContainer's slot pass.
