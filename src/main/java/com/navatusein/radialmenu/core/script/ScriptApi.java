@@ -133,6 +133,8 @@ final class ScriptApi {
         });
         globals.set("action", action);
 
+        globals.set("chunk", chunkTable());
+
         globals.set("player", playerTable(task));
 
         globals.load(prelude(), "radialmenu-prelude")
@@ -140,12 +142,52 @@ final class ScriptApi {
     }
 
     /**
+     * Converting between a world coordinate and the chunk it lives in.
+     *
+     * <p>
+     * The only functions a script can call that do not suspend, because they are the only ones that ask the game
+     * nothing: a chunk coordinate is arithmetic on a number the script already has. They return there and then, and
+     * a script may use them in a loop without spending a tick on each turn.
+     */
+    private static LuaTable chunkTable() {
+        LuaTable chunk = new LuaTable();
+        chunk.set("of", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                return LuaValue.valueOf(ChunkCoords.chunkOf(args.checkint(1)));
+            }
+        });
+        chunk.set("offset", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                return LuaValue.valueOf(ChunkCoords.offsetOf(args.checkint(1)));
+            }
+        });
+        chunk.set("toWorld", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                return LuaValue.valueOf(ChunkCoords.toWorld(args.checkint(1), args.optint(2, 0)));
+            }
+        });
+        chunk.set("size", LuaValue.valueOf(ChunkCoords.SIZE));
+        return chunk;
+    }
+
+    /**
      * Reads the player's position when the script looks at it, through a metatable rather than as fixed fields.
      *
      * <p>
      * A script can be alive across a teleport - that is rather the point of one - so values copied in at launch would
-     * be
-     * a lie by the time they were used.
+     * be a lie by the time they were used. That goes double for where the player is looking, which changes with every
+     * mouse movement rather than only with a teleport.
+     *
+     * <p>
+     * Everything derived - the chunk, the compass direction - is worked out here from what the context already
+     * answers, rather than added to the context. The host's job is to say where the player is; turning that into a
+     * chunk is arithmetic, and arithmetic belongs on this side of the line where a test can reach it.
      */
     private static LuaTable playerTable(final ScriptTask task) {
         LuaTable player = new LuaTable();
@@ -174,6 +216,31 @@ final class ScriptApi {
                 }
                 if ("z".equals(key)) {
                     return LuaValue.valueOf(context.blockZ());
+                }
+                // Which chunk, and where in it - the same arithmetic the chunk table offers a script for any
+                // other coordinate, so the two can never answer differently about the same block.
+                if ("chunkX".equals(key)) {
+                    return LuaValue.valueOf(ChunkCoords.chunkOf(context.blockX()));
+                }
+                if ("chunkZ".equals(key)) {
+                    return LuaValue.valueOf(ChunkCoords.chunkOf(context.blockZ()));
+                }
+                if ("xInChunk".equals(key)) {
+                    return LuaValue.valueOf(ChunkCoords.offsetOf(context.blockX()));
+                }
+                if ("zInChunk".equals(key)) {
+                    return LuaValue.valueOf(ChunkCoords.offsetOf(context.blockZ()));
+                }
+                // Normalised on the way out: a player who has turned around three times carries a yaw in the
+                // hundreds, and a script comparing one against a number should not have to know that.
+                if ("yaw".equals(key)) {
+                    return LuaValue.valueOf(Facing.normalizeYaw(context.yaw()));
+                }
+                if ("pitch".equals(key)) {
+                    return LuaValue.valueOf(context.pitch());
+                }
+                if ("facing".equals(key)) {
+                    return LuaValue.valueOf(Facing.of(context.yaw()));
                 }
                 return LuaValue.NIL;
             }

@@ -26,6 +26,18 @@ public interface ScriptContext {
     int blockZ();
 
     /**
+     * Where the player is looking, in degrees, exactly as the game holds it.
+     *
+     * <p>
+     * Unbounded and starting at south, because that is what it is - a player who has turned around three times
+     * carries a yaw in the hundreds. {@link Facing} is where it is made presentable, so this stays the raw number
+     * and there is one place that knows the convention rather than two.
+     */
+    double yaw();
+
+    double pitch();
+
+    /**
      * How far each colour lands from a chosen accent.
      *
      * <p>

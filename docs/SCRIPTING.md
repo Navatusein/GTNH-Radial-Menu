@@ -99,8 +99,44 @@ and unpleasant for fifty. The practical loop is an external editor on the profil
 | `player.name` | The player's name. |
 | `player.dim` | Dimension id. |
 | `player.x`, `player.y`, `player.z` | Block coordinates, floored. |
+| `player.chunkX`, `player.chunkZ` | The chunk those coordinates fall in. Negative blocks work the way the game means them: block `-200` is chunk `-13`. |
+| `player.xInChunk`, `player.zInChunk` | Where in that chunk, `0`–`15`. |
+| `player.facing` | `"north"`, `"south"`, `"east"` or `"west"` — whichever quarter of the compass the player is looking into. |
+| `player.yaw` | `0`–`360`. Minecraft's convention, so **`0` is south**, `90` west, `180` north, `270` east. Normalised, so turning around a few times does not change the number you compare against. |
+| `player.pitch` | `-90` (straight up) to `90` (straight down), `0` level. |
 
-Read when touched, so after a teleport the next read is the new position.
+Read when touched, so after a teleport the next read is the new position — and the next read of `yaw` is wherever
+the mouse has got to since.
+
+```lua
+notify(("%s at %d,%d,%d in chunk %d,%d, facing %s")
+  :format(player.name, player.x, player.y, player.z, player.chunkX, player.chunkZ, player.facing))
+```
+
+### `chunk.of(world)`, `chunk.offset(world)`, `chunk.toWorld(chunk, offset)`
+
+The same arithmetic for *any* coordinate, not only the player's — for a position a script read out of a chat line,
+say. `chunk.size` is 16.
+
+| Call | Gives |
+|---|---|
+| `chunk.of(-200)` | `-13` — the chunk that block is in. |
+| `chunk.offset(-200)` | `8` — how far into it. |
+| `chunk.toWorld(-13, 8)` | `-200` — the two put back together. |
+| `chunk.toWorld(-13)` | `-208` — the chunk's own corner; the offset defaults to 0. |
+
+The offset is not clamped: `chunk.toWorld(5, 19)` is the block four past that chunk's edge, which is what a script
+doing its own arithmetic means by it.
+
+These are the only calls in the API that **do not suspend** — they ask the game nothing, so they return there and
+then and may be used in a loop without spending a tick a turn.
+
+```lua
+-- The middle of the chunk the player is standing in
+local x = chunk.toWorld(player.chunkX, 8)
+local z = chunk.toWorld(player.chunkZ, 8)
+chat.send(("/tp %d %d %d"):format(x, player.y, z))
+```
 
 ### `chat.send(text)`
 
