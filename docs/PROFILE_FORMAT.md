@@ -137,6 +137,7 @@ That puts "Top" at 12 o'clock and, on an 8-slot wheel, "Bottom" at 4:30. The `nu
 "icon": { "kind": "sprite", "id": "phosphor:feather", "color": "#7FD4FF" }
 "icon": { "kind": "file", "id": "backpack.png" }
 "icon": { "kind": "effect", "id": "potion.moveSpeed" }
+"icon": { "kind": "player", "id": "Navatusein" }
 ```
 
 | `kind` | `id` | Notes |
@@ -145,6 +146,7 @@ That puts "Top" at 12 o'clock and, on an 8-slot wheel, "Bottom" at 4:30. The `nu
 | `"sprite"` | `phosphor:<name>` | 1512 bundled monochrome icons. Names are listed in `assets/radialmenu/icons/phosphor.json` inside the jar — e.g. `phosphor:sword`, `phosphor:axe`, `phosphor:gear`, `phosphor:house`. The `phosphor:` prefix is required. |
 | `"file"` | File name inside `RadialMenu/icons/` | e.g. `backpack.png`. The player has to put the file there. |
 | `"effect"` | A potion's unlocalized name, e.g. `potion.moveSpeed`, `potion.nightVision` | Drawn from the sheet vanilla uses for the inventory's effect list, so modded effects work too. Identified by name rather than id, which shifts between packs. Carries its own colours; `color` is ignored. |
+| `"player"` | A player name, e.g. `Navatusein` | The face off their skin, hat layer included. Cut from the skin the client already has while that player is loaded nearby, then kept in `RadialMenu/cache/heads/` so it still draws once they log off. Nothing is drawn for someone never seen and not in the cache. Carries its own colours; `color` is ignored. |
 
 `color` applies to `sprite` and `file` only, as `#RRGGBB`:
 
