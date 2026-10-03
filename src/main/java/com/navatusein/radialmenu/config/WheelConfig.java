@@ -60,19 +60,38 @@ public class WheelConfig {
     @Config.Order(8)
     public static boolean smoothEdges;
 
+    @Config.Comment("Size of a slot's icon, in GUI pixels. The plate behind it follows, so the two stay the "
+        + "proportions vanilla drew them at.")
+    @Config.DefaultInt(16)
+    @Config.RangeInt(min = 8, max = 48)
+    @Config.Order(9)
+    public static int iconSize;
+
     @Config.Comment("What to draw behind each icon: NONE, SLOT for an inventory cell, HOTBAR for cells with the "
         + "hotbar's selection frame around the entry under the cursor, or SELECTED for that frame around every one.")
     @Config.DefaultEnum("NONE")
-    @Config.Order(9)
+    @Config.Order(10)
     public static SlotPlate slotPlate;
 
     @Config.Comment("Wash the screen behind the wheel with a colour, to make it easier to read against a busy world.")
     @Config.DefaultBoolean(false)
-    @Config.Order(10)
+    @Config.Order(11)
     public static boolean dimBackground;
 
     /** Guards against a hand-edited config where the hole is bigger than the ring. */
     public static int effectiveInnerRadius() {
         return Math.min(innerRadius, outerRadius - 8);
+    }
+
+    /**
+     * How big an icon is drawn on the wheel.
+     *
+     * <p>
+     * Only on the wheel. The editors draw icons into cells of their own, which are measured in {@code Ui} and have
+     * nothing to do with how large the player likes them in the world - a thirty-two pixel icon in a twenty pixel
+     * grid cell would be the setting reaching somewhere it was never about.
+     */
+    public static int effectiveIconSize() {
+        return Math.max(4, iconSize);
     }
 }
