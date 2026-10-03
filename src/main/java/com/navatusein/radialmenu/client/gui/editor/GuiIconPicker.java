@@ -23,6 +23,7 @@ import com.navatusein.radialmenu.client.gui.ui.UiCheckbox;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 import com.navatusein.radialmenu.client.gui.ui.UiTabButton;
 import com.navatusein.radialmenu.client.icon.IconRenderer;
+import com.navatusein.radialmenu.client.icon.PlayerHeadIcons;
 import com.navatusein.radialmenu.client.icon.PotionIcons;
 import com.navatusein.radialmenu.client.icon.SpriteAtlas;
 import com.navatusein.radialmenu.client.icon.UserIconLoader;
@@ -46,7 +47,8 @@ public class GuiIconPicker extends UiScreen {
         ITEMS,
         SPRITES,
         EFFECTS,
-        FILES
+        FILES,
+        PLAYERS
     }
 
     /**
@@ -390,10 +392,42 @@ public class GuiIconPicker extends UiScreen {
                     }
                 }
                 break;
+            case PLAYERS:
+                fillPlayers(needle);
+                break;
             default:
                 break;
         }
         clampScroll();
+    }
+
+    /**
+     * Who the player can pick a head of: whoever is here, plus everyone a head was already cut for.
+     *
+     * <p>
+     * The search box doubles as an entry field here. A name typed into it is offered as its own cell even when
+     * nobody by that name is around, because the head of someone offline is exactly the case this icon exists for -
+     * it will be drawn from the cache, or the next time they log in.
+     */
+    private void fillPlayers(String needle) {
+        Set<String> seen = new HashSet<>();
+        List<String> names = new ArrayList<>(PlayerHeadIcons.listLoaded());
+        names.addAll(PlayerHeadIcons.listCached());
+
+        String typed = query.trim();
+        if (!typed.isEmpty()) {
+            visible.add(new Entry(typed, 0, null));
+            seen.add(typed.toLowerCase());
+        }
+        for (String name : names) {
+            if (!seen.add(name.toLowerCase())) {
+                continue;
+            }
+            Entry entry = new Entry(name, 0, null);
+            if (matches(entry, needle)) {
+                visible.add(entry);
+            }
+        }
     }
 
     /** One haystack per entry, so the id and the name the player reads are searched in a single pass. */
@@ -426,6 +460,24 @@ public class GuiIconPicker extends UiScreen {
         }
     }
 
+    /**
+     * What to say when a tab has nothing in it.
+     *
+     * <p>
+     * A tab fed by the world rather than by the search has its own answer: told "nothing matches that search" when
+     * the real reason is that nobody is online, a player would keep retyping the name.
+     */
+    private String emptyMessageKey() {
+        switch (tab) {
+            case FILES:
+                return "radialmenu.icons.noFiles";
+            case PLAYERS:
+                return "radialmenu.icons.noPlayers";
+            default:
+                return "radialmenu.icons.noMatches";
+        }
+    }
+
     /** Builds the spec for an entry of the current tab, so drawing and picking cannot disagree about it. */
     private IconSpec specFor(Entry entry) {
         switch (tab) {
@@ -433,6 +485,8 @@ public class GuiIconPicker extends UiScreen {
                 return IconSpec.sprite(SpriteAtlas.qualify(entry.id), color);
             case EFFECTS:
                 return IconSpec.effect(entry.id);
+            case PLAYERS:
+                return IconSpec.player(entry.id);
             case FILES:
                 IconSpec file = IconSpec.file(entry.id);
                 // Null means untinted, which is how the artwork's own colours survive.
@@ -512,8 +566,7 @@ public class GuiIconPicker extends UiScreen {
         if (visible.isEmpty()) {
             this.drawCenteredString(
                 this.fontRendererObj,
-                EnumChatFormatting.GRAY
-                    + I18n.format(tab == Tab.FILES ? "radialmenu.icons.noFiles" : "radialmenu.icons.noMatches"),
+                EnumChatFormatting.GRAY + I18n.format(emptyMessageKey()),
                 this.width / 2,
                 gridTop + 8,
                 Ui.TEXT);

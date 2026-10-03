@@ -28,7 +28,18 @@ public class IconSpec {
 
         /** A status effect, drawn from the sheet vanilla uses for the effect list in the inventory. */
         @SerializedName("effect")
-        EFFECT
+        EFFECT,
+
+        /**
+         * The face off a player's skin, by name.
+         *
+         * <p>
+         * Cut from the skin the client already has for whoever is on the server, and kept afterwards: the whole
+         * point is an entry for a particular person, and a head that vanished the moment they logged off would be
+         * at its blankest exactly when you wanted to message them.
+         */
+        @SerializedName("player")
+        PLAYER
     }
 
     public Kind kind = Kind.ITEM;
@@ -65,6 +76,14 @@ public class IconSpec {
         return icon;
     }
 
+    /** @param playerName the name as the server knows it; the skin is found and cached under it */
+    public static IconSpec player(String playerName) {
+        IconSpec icon = new IconSpec();
+        icon.kind = Kind.PLAYER;
+        icon.id = playerName;
+        return icon;
+    }
+
     /** @param effectName the potion's unlocalized name, which is stable where its numeric id is not */
     public static IconSpec effect(String effectName) {
         IconSpec icon = new IconSpec();
@@ -75,7 +94,7 @@ public class IconSpec {
 
     /**
      * Reads the one-string form: {@code minecraft:stone}, {@code minecraft:wool:5}, {@code sprite:phosphor:house},
-     * {@code file:backpack.png}, {@code effect:potion.moveSpeed}.
+     * {@code file:backpack.png}, {@code effect:potion.moveSpeed}, {@code player:Navatusein}.
      *
      * <p>
      * No prefix means an item, because that is what most icons are and because a script builds those names out of
@@ -103,6 +122,9 @@ public class IconSpec {
         }
         if (hasPrefix(value, "effect")) {
             return afterPrefix(value).isEmpty() ? null : effect(afterPrefix(value));
+        }
+        if (hasPrefix(value, "player")) {
+            return afterPrefix(value).isEmpty() ? null : player(afterPrefix(value));
         }
         if (hasPrefix(value, "item")) {
             value = afterPrefix(value);
