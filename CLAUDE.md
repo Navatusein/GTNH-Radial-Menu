@@ -282,6 +282,17 @@ flat sprites ignore lighting and look fine, which makes the symptom look selecti
 astray. Drawing an item *after* a vanilla button inherits state that dims it; put a preview beside a button, not on
 it.
 
+**A player's head is learned, not fetched.** 1.7.10 downloads skins from `skins.minecraft.net`, an address that
+has not answered for years, so `PlayerHeadIcons` never asks: while a player is loaded on the client their skin is
+already a texture the game renders them with, and the face is read back off the GPU with `glGetTexImage` and the hat
+layer blended over it. Whatever the pack does about skins - HD ones included, which is why the layout is measured as
+a multiple of 64 wide - this follows, because it reads the result rather than repeating the request. Faces are
+written to `RadialMenu/cache/heads` as 8x8 PNGs: an entry naming a person is at its most useful when they are not
+around, and a head that went blank the moment they logged off would be blank exactly then. The capture repeats every
+ten seconds while they are here, which is what fixes a face cut before the skin download landed - and it writes
+through the same `DynamicTexture` rather than making a new one, because a dynamic texture is a GL id the game will
+not hand back.
+
 **Icon size is the wheel's, not the editors'.** `WheelConfig.effectiveIconSize` is read by `WheelRenderer` and
 nowhere else; `IconRenderer.draw(icon, x, y)` still means sixteen, because its callers are editor cells measured in
 `Ui` and a thirty-two pixel icon in a twenty pixel cell is the setting reaching somewhere it was never about. The

@@ -74,6 +74,9 @@ public final class IconRenderer {
             case EFFECT:
                 drawEffect(icon, x, y, size);
                 break;
+            case PLAYER:
+                drawPlayerHead(icon, x, y, size);
+                break;
             default:
                 break;
         }
@@ -221,6 +224,25 @@ public final class IconRenderer {
             PotionIcons.maxV(index));
     }
 
+    /**
+     * The face off a player's skin.
+     *
+     * <p>
+     * Untinted, like an item: it is somebody's own artwork. Nothing is drawn while the head is still being
+     * fetched - a slot briefly without its picture is better than a wrong head that then changes.
+     */
+    private static void drawPlayerHead(IconSpec icon, int x, int y, int size) {
+        ResourceLocation head = PlayerHeadIcons.texture(icon.id);
+        if (head == null) {
+            return;
+        }
+        Minecraft.getMinecraft()
+            .getTextureManager()
+            .bindTexture(head);
+
+        drawTexturedQuad(x, y, size, 0xFFFFFF, 0f, 0f, 1f, 1f);
+    }
+
     private static void drawFile(IconSpec icon, int x, int y, int size) {
         ResourceLocation texture = UserIconLoader.texture(icon.id);
         if (texture == null) {
@@ -284,5 +306,6 @@ public final class IconRenderer {
     public static void clearCache() {
         ITEM_CACHE.clear();
         UserIconLoader.refresh();
+        PlayerHeadIcons.refresh();
     }
 }
