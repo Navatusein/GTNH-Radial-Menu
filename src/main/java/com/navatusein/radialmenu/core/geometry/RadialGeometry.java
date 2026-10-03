@@ -67,6 +67,49 @@ public final class RadialGeometry {
         return slotCount <= 0 ? 0.0 : 360.0 / slotCount;
     }
 
+    /**
+     * Angular width of one slot of a ring that covers an arc rather than the whole circle.
+     *
+     * <p>
+     * An inline submenu is a ring with a beginning and an end, so everything below takes the arc it is drawn in
+     * instead of assuming 360 degrees. A full ring is the same arithmetic with {@code arcSpan == 360}, which is why
+     * there is one set of functions and not two.
+     */
+    public static double arcSlotSpan(double arcSpan, int slotCount) {
+        return slotCount <= 0 ? 0.0 : arcSpan / slotCount;
+    }
+
+    /** Angle the given slot of an arc starts at. */
+    public static double arcSlotStart(int slot, int slotCount, double startAngle, double arcSpan) {
+        return startAngle + slot * arcSlotSpan(arcSpan, slotCount);
+    }
+
+    /** Middle of a slot's sector within an arc - where its icon and label go. */
+    public static double arcSlotCenter(int slot, int slotCount, double startAngle, double arcSpan) {
+        return startAngle + (slot + 0.5) * arcSlotSpan(arcSpan, slotCount);
+    }
+
+    /**
+     * Slot of an arc an angle falls in, or {@link #NO_SLOT} when the angle is outside the arc altogether.
+     *
+     * <p>
+     * The distance from the start is measured round the circle, so an arc that crosses the top of the wheel needs no
+     * special case. An arc of a full 360 degrees therefore never answers {@link #NO_SLOT}, which is what keeps the
+     * main ring behaving exactly as {@link #slotAtAngle} always has.
+     */
+    public static int slotInArc(double angleDegrees, double startAngle, double arcSpan, int slotCount) {
+        if (slotCount <= 0 || arcSpan <= 0.0) {
+            return NO_SLOT;
+        }
+        double fromStart = normalizeDegrees(angleDegrees - startAngle);
+        if (arcSpan < 360.0 && fromStart > arcSpan) {
+            return NO_SLOT;
+        }
+        int slot = (int) (fromStart / arcSlotSpan(arcSpan, slotCount));
+        // The division lands exactly on slotCount at the far end of a full ring, and a hair past it on an arc.
+        return Math.min(slot, slotCount - 1);
+    }
+
     /** X offset of a point at {@code radius} along {@code angleDegrees}, in screen coordinates. */
     public static double offsetX(double angleDegrees, double radius) {
         return Math.sin(Math.toRadians(angleDegrees)) * radius;

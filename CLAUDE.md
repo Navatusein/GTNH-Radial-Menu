@@ -179,6 +179,38 @@ An analysis of "this mod cannot be driven at all" was drawn from the stale jar a
 `java -p` on the pack's own jars is the way to settle these; the bug report that corrected this one carried the
 bytecode offsets.
 
+**A ring is an arc, and the wheel is a list of them.** A submenu whose `layout.opening` is `inline` does not
+replace the wheel: it unfolds outside its parent, which stays on screen, so several menus are drawn at once at
+different radii and over different stretches of the circle. `WheelRing` is one of them - a menu, an arc, a band of
+radii - and the menu at the middle is simply an arc of 360 degrees starting half a sector before the top, which is
+why there is one drawing path and not one per kind. Everything angular goes through the ring (`slotStart`,
+`slotCenter`, `slotAt`); nothing may divide 360 by a slot count again.
+
+**One branch to a menu.** Unfolding a submenu folds away whichever sibling its own menu had open - siblings only,
+because the chain this entry hangs off is the ring the player is pointing at and folding that would take the wheel
+out from under them. Two neighbours unfolded at once put two rings over the same stretch of circle and neither of
+them where its entry is, which is what made this a correction rather than a preference. `collapse` therefore walks
+all the way down even where nothing is open: a branch left in the set brings back whatever was open inside it the
+next time it is unfolded.
+
+**An arc still has to be placed, and `core/geometry/ArcLayout` is the only thing that places one.** It slides
+overlapping arcs apart by half the overlap each, keeping the order they sit in round the circle - an arc that jumped
+past its neighbour to find room would be drawn outside somebody else's entry - and scales an over-full ring down to
+lie end to end rather than over itself, which is the case a wide menu still reaches on its own. An inline sector is
+drawn the same *arc length* as the sector it came from - fewer degrees further out - so an entry is the same size to
+aim at whichever ring it is on.
+
+**The hover delay is not a nicety.** The cursor crosses every sector between where it was and where it is going, so
+unfolding on the first frame of contact opens half the wheel on the way past. `inlineHoverDelayMs` is what stops
+that; zero is a choice the player can make, not the default. Each ring carries its own `WheelAnimator`, keyed by menu
+identity and rebuilt from the rings actually drawn - sharing one would either replay the parent's arrival or deny the
+newcomer its own, and dropping the clock of a folded branch is what makes it arrive again rather than appear
+finished.
+
+**Inline is off under `scrollToSelect`.** That model has one ring and one index; an inline submenu is several rings at
+once, and a selection driven by the scroll wheel would have no way to cross into one. Such a menu drills in as if it
+were `replace` there - a worse wheel than the player asked for, but a working one.
+
 Two screen flags matter: `doesGuiPauseGame()` must return false, and `allowUserInput` must be set — 1.7.10 gates its
 entire keyboard/mouse block on `currentScreen == null || currentScreen.allowUserInput`, so without it the player
 stops moving. Opening any screen still runs `unPressAllKeys()` once, so a key already held goes dead; `HeldKeyResync`
@@ -408,10 +440,10 @@ handles enum casing instead.
 
 ## Status
 
-Working: template setup, mixin accessor, `core/` + 114 tests, profiles with auto-bind, wheel rendering and
+Working: template setup, mixin accessor, `core/` + unit tests, profiles with auto-bind, wheel rendering and
 lifecycle, keybind action (tap/toggle/hold), profile-switch action, command action with placeholders, action chains,
-submenu-as-action-type with per-menu layout and colours, entry reordering, the full editor, `/radialmenu`, and the
-Lua script action with menus it builds at run time.
+submenu-as-action-type with per-menu layout and colours, submenus that open inline as rings around their parent,
+entry reordering, the full editor, `/radialmenu`, and the Lua script action with menus it builds at run time.
 
 The wheel's look is settled: six colours down the config → profile → menu chain, an accent that fills them in, a
 linear sector gap, a one-pixel soft edge, an outline the highlighted sector gets to itself, an optional wash behind

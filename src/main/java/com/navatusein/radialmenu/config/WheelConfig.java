@@ -28,6 +28,13 @@ public class WheelConfig {
     @Config.Order(3)
     public static float sectorGap;
 
+    @Config.Comment("Distance between a submenu opened inline and the ring it unfolded from, in GUI pixels. Every "
+        + "ring is as thick as the first, so this is the only thing between them.")
+    @Config.DefaultInt(2)
+    @Config.RangeInt(min = 0, max = 32)
+    @Config.Order(6)
+    public static int inlineRingSpacing;
+
     @Config.Comment("Thickness of the wheel's lines, in GUI pixels.")
     @Config.DefaultInt(1)
     @Config.RangeInt(min = 1, max = 6)
