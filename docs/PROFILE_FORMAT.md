@@ -72,7 +72,7 @@ One object type covers both an entry and a submenu.
 | `keepOpen` | bool | `true` leaves the wheel open after the entry fires, so it can be triggered repeatedly. Default `false`. |
 | `action` | object | What the entry does. Makes the node an **entry**. |
 | `children` | array | Makes the node a **submenu** — its own wheel. |
-| `layout` | object | Sector layout of this node's children wheel. Submenus only. |
+| `layout` | object | Sector layout of this node's children wheel, and how it opens. Submenus only. |
 | `style` | object | Colour overrides for this node's children wheel. Submenus only. |
 
 **A node is one or the other.** `children` present ⇒ submenu, and any `action` on it is dropped. `action` present and
@@ -94,6 +94,26 @@ a submenu is simply a node that has `children`.
 
 `slots` is clamped to **2–24**, default `8`, and only matters for `fixed`. A node with `children` but no `layout`
 gets `dynamic`.
+
+### How a submenu arrives
+
+```json
+"layout": { "mode": "dynamic", "opening": "inline" }
+```
+
+| `opening` | Behaviour |
+|---|---|
+| `"replace"` | The submenu takes the whole wheel over, and right-click goes back to the parent. The default, and what every profile written before this field did. |
+| `"inline"` | The submenu unfolds as a ring *outside* the parent, which stays on screen. Pointing at the entry opens it; right-click on the ring, or on the entry it came from, folds it away. Opening another submenu of the same menu folds the first one away, so one branch is open per menu - an inline submenu inside an inline submenu adds a further ring instead. |
+
+An inline ring covers only the stretch of circle it needs, centred on the entry it belongs to. Its sectors are drawn
+the same width as the sector they came out of, which further from the middle is fewer degrees. A ring too wide for the
+circle is scaled down to fit rather than drawn over itself.
+
+How long the cursor has to rest on an entry before it unfolds is `inlineHoverDelayMs` in the mod's own config — it is
+about the hand on the mouse rather than about the menu, so it does not travel with the profile. Inline submenus are
+ignored when `scrollToSelect` is on: that model has one ring and one index, so such a menu drills in as if it were
+`replace`.
 
 **Sector 0 is at the top** (12 o'clock) and they run **clockwise**. Sectors are centred on their angle, so the first
 one straddles the top rather than starting there.

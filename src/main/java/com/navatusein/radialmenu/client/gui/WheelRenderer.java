@@ -74,14 +74,24 @@ public final class WheelRenderer {
             colors.icon);
     }
 
-    public static void drawWheel(MenuNode menu, WheelColors colors, int slotCount, int centerX, int centerY,
-        int hoveredSlot, boolean editMode, WheelAnimator animator) {
+    /**
+     * Draws one ring: the menu at the centre, or an inline submenu unfolded around a sector of it.
+     *
+     * <p>
+     * Everything angular comes from the ring rather than from the slot count, because an inline submenu covers a
+     * stretch of the circle and not the whole of it. The centre ring is an arc of 360 degrees, so there is one path
+     * through here and not a special case per kind.
+     */
+    public static void drawRing(WheelRing ring, WheelColors colors, int centerX, int centerY, int hoveredSlot,
+        WheelAnimator animator) {
+        MenuNode menu = ring.menu;
+        int slotCount = ring.slotCount;
         if (slotCount <= 0) {
             return;
         }
 
-        int outer = WheelConfig.outerRadius;
-        int inner = WheelConfig.effectiveInnerRadius();
+        double outer = ring.outer;
+        double inner = ring.inner;
 
         // Only the growing kinds scale; a fade leaves the wheel where it is and brings it up in place.
         boolean grows = AnimationConfig.revealAnimation != RevealAnimation.FADE;
@@ -99,7 +109,7 @@ public final class WheelRenderer {
 
         beginShapes();
 
-        double span = RadialGeometry.sectorSpan(slotCount);
+        double span = ring.slotSpan();
         for (int slot = 0; slot < slotCount; slot++) {
             float reveal = animator.reveal(slot, slotCount);
             if (reveal <= 0.01f) {
@@ -117,7 +127,7 @@ public final class WheelRenderer {
             }
             color = fade(color, reveal);
             int lineColor = fade(colors.border, reveal);
-            double start = RadialGeometry.slotCenterAngle(slot, slotCount, 0.0) - span / 2.0;
+            double start = ring.slotStart(slot);
 
             fillSector(centerX, centerY, sectorInner, sectorOuter, start, span, gap, color);
 
@@ -160,7 +170,7 @@ public final class WheelRenderer {
             && hoveredSlot >= 0
             && hoveredSlot < slotCount) {
             float reveal = animator.reveal(hoveredSlot, slotCount);
-            double start = RadialGeometry.slotCenterAngle(hoveredSlot, slotCount, 0.0) - span / 2.0;
+            double start = ring.slotStart(hoveredSlot);
             outlineSector(
                 centerX,
                 centerY,
@@ -176,9 +186,8 @@ public final class WheelRenderer {
 
         endShapes();
 
-        drawPlates(menu, centerX, centerY, slotCount, inner, outer, hoveredSlot, grows, animator);
-        drawIcons(menu, centerX, centerY, slotCount, inner, outer, grows, animator);
-        drawLabel(menu, centerX, centerY, hoveredSlot);
+        drawPlates(ring, centerX, centerY, hoveredSlot, grows, animator);
+        drawIcons(ring, centerX, centerY, grows, animator);
     }
 
     /**
@@ -482,44 +491,43 @@ public final class WheelRenderer {
      * Every cell first and the selection frame last, so the frame overlaps its neighbours rather than being clipped
      * by whichever cell happens to be drawn after it.
      */
-    private static void drawPlates(MenuNode menu, int centerX, int centerY, int slotCount, int inner, int outer,
-        int hoveredSlot, boolean grows, WheelAnimator animator) {
+    private static void drawPlates(WheelRing ring, int centerX, int centerY, int hoveredSlot, boolean grows,
+        WheelAnimator animator) {
         SlotPlate plate = WheelConfig.slotPlate;
         if (plate == null || plate == SlotPlate.NONE) {
             return;
         }
 
+        int slotCount = ring.slotCount;
         for (int slot = 0; slot < slotCount; slot++) {
-            if (menu.childAt(slot) == null || !arrived(animator, slot, slotCount)) {
+            if (ring.childAt(slot) == null || !arrived(animator, slot, slotCount)) {
                 continue;
             }
-            double iconRadius = iconRadius(inner, outer, slot, slotCount, grows, animator);
-            int x = iconLeft(centerX, slot, slotCount, iconRadius);
-            int y = iconTop(centerY, slot, slotCount, iconRadius);
+            double iconRadius = iconRadius(ring, slot, grows, animator);
+            int x = iconLeft(centerX, ring, slot, iconRadius);
+            int y = iconTop(centerY, ring, slot, iconRadius);
             drawTexture(INVENTORY, x - 1, y - 1, 7, 141, 18, 18);
         }
 
         if (plate == SlotPlate.SELECTED) {
             for (int slot = 0; slot < slotCount; slot++) {
-                if (menu.childAt(slot) == null || !arrived(animator, slot, slotCount)) {
+                if (ring.childAt(slot) == null || !arrived(animator, slot, slotCount)) {
                     continue;
                 }
-                double iconRadius = iconRadius(inner, outer, slot, slotCount, grows, animator);
-                drawSelection(
-                    iconLeft(centerX, slot, slotCount, iconRadius),
-                    iconTop(centerY, slot, slotCount, iconRadius));
+                double iconRadius = iconRadius(ring, slot, grows, animator);
+                drawSelection(iconLeft(centerX, ring, slot, iconRadius), iconTop(centerY, ring, slot, iconRadius));
             }
             return;
         }
 
         if (plate != SlotPlate.HOTBAR || hoveredSlot < 0
-            || menu.childAt(hoveredSlot) == null
+            || ring.childAt(hoveredSlot) == null
             || !arrived(animator, hoveredSlot, slotCount)) {
             return;
         }
-        double hoveredRadius = iconRadius(inner, outer, hoveredSlot, slotCount, grows, animator);
-        int x = iconLeft(centerX, hoveredSlot, slotCount, hoveredRadius);
-        int y = iconTop(centerY, hoveredSlot, slotCount, hoveredRadius);
+        double hoveredRadius = iconRadius(ring, hoveredSlot, grows, animator);
+        int x = iconLeft(centerX, ring, hoveredSlot, hoveredRadius);
+        int y = iconTop(centerY, ring, hoveredSlot, hoveredRadius);
         drawSelection(x, y);
     }
 
@@ -564,13 +572,13 @@ public final class WheelRenderer {
         GL11.glDisable(GL11.GL_BLEND);
     }
 
-    private static int iconLeft(int centerX, int slot, int slotCount, double iconRadius) {
-        double angle = RadialGeometry.slotCenterAngle(slot, slotCount, 0.0);
+    private static int iconLeft(int centerX, WheelRing ring, int slot, double iconRadius) {
+        double angle = ring.slotCenter(slot);
         return (int) Math.round(centerX + RadialGeometry.offsetX(angle, iconRadius)) - IconRenderer.ICON_SIZE / 2;
     }
 
-    private static int iconTop(int centerY, int slot, int slotCount, double iconRadius) {
-        double angle = RadialGeometry.slotCenterAngle(slot, slotCount, 0.0);
+    private static int iconTop(int centerY, WheelRing ring, int slot, double iconRadius) {
+        double angle = ring.slotCenter(slot);
         return (int) Math.round(centerY + RadialGeometry.offsetY(angle, iconRadius)) - IconRenderer.ICON_SIZE / 2;
     }
 
@@ -580,10 +588,9 @@ public final class WheelRenderer {
      * <p>
      * Midway between the two radii, which is where it has always been - it only moves now because the radii do.
      */
-    private static double iconRadius(int inner, int outer, int slot, int slotCount, boolean grows,
-        WheelAnimator animator) {
-        float reveal = animator.reveal(slot, slotCount);
-        return (grows ? (inner + outer) / 2.0 * reveal : (inner + outer) / 2.0) + animator.push(slot);
+    private static double iconRadius(WheelRing ring, int slot, boolean grows, WheelAnimator animator) {
+        float reveal = animator.reveal(slot, ring.slotCount);
+        return (grows ? ring.midRadius() * reveal : ring.midRadius()) + animator.push(slot);
     }
 
     /**
@@ -597,18 +604,15 @@ public final class WheelRenderer {
         return animator.reveal(slot, slotCount) > 0.5f;
     }
 
-    private static void drawIcons(MenuNode menu, int centerX, int centerY, int slotCount, int inner, int outer,
-        boolean grows, WheelAnimator animator) {
-        for (int slot = 0; slot < slotCount; slot++) {
-            MenuNode child = menu.childAt(slot);
-            if (child == null || child.icon == null || !arrived(animator, slot, slotCount)) {
+    private static void drawIcons(WheelRing ring, int centerX, int centerY, boolean grows, WheelAnimator animator) {
+        for (int slot = 0; slot < ring.slotCount; slot++) {
+            MenuNode child = ring.childAt(slot);
+            if (child == null || child.icon == null || !arrived(animator, slot, ring.slotCount)) {
                 continue;
             }
-            double iconRadius = iconRadius(inner, outer, slot, slotCount, grows, animator);
-            IconRenderer.draw(
-                child.icon,
-                iconLeft(centerX, slot, slotCount, iconRadius),
-                iconTop(centerY, slot, slotCount, iconRadius));
+            double iconRadius = iconRadius(ring, slot, grows, animator);
+            IconRenderer
+                .draw(child.icon, iconLeft(centerX, ring, slot, iconRadius), iconTop(centerY, ring, slot, iconRadius));
         }
     }
 
@@ -640,8 +644,12 @@ public final class WheelRenderer {
      * Wrapped to the hole in the middle rather than drawn as one line: a two-word name written across the ring
      * covers the very sectors the player is choosing between. However many lines that takes - a name is something
      * the player wrote, and cutting the end off it to save a line of pixels answers a question nobody asked.
+     *
+     * <p>
+     * Drawn by the screen once rather than by each ring: the hole in the middle belongs to no ring in particular,
+     * and with several on screen only one of them holds the selection.
      */
-    private static void drawLabel(MenuNode menu, int centerX, int centerY, int hoveredSlot) {
+    public static void drawLabel(MenuNode menu, int centerX, int centerY, int hoveredSlot) {
         MenuNode hovered = menu.childAt(hoveredSlot);
         String text = hovered == null ? null : hovered.title;
         if (text == null || text.isEmpty()) {

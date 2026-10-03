@@ -112,4 +112,47 @@ public class RadialGeometryTest {
         // asks for it simply has nothing left to draw.
         assertEquals(90.0, RadialGeometry.gapInsetDegrees(8.0, 40.0), 0.0);
     }
+
+    @Test
+    public void anArcOnlyAnswersForAnglesInsideIt() {
+        // A quarter of the wheel starting at 45, split in three: 45-75, 75-105, 105-135.
+        assertEquals(0, RadialGeometry.slotInArc(50.0, 45.0, 90.0, 3));
+        assertEquals(1, RadialGeometry.slotInArc(90.0, 45.0, 90.0, 3));
+        assertEquals(2, RadialGeometry.slotInArc(130.0, 45.0, 90.0, 3));
+        assertEquals(RadialGeometry.NO_SLOT, RadialGeometry.slotInArc(20.0, 45.0, 90.0, 3));
+        assertEquals(RadialGeometry.NO_SLOT, RadialGeometry.slotInArc(200.0, 45.0, 90.0, 3));
+    }
+
+    @Test
+    public void anArcAcrossTheTopOfTheWheelNeedsNoSpecialCase() {
+        // 330 round to 30, two slots: 330-0 and 0-30.
+        assertEquals(0, RadialGeometry.slotInArc(340.0, 330.0, 60.0, 2));
+        assertEquals(1, RadialGeometry.slotInArc(10.0, 330.0, 60.0, 2));
+        assertEquals(RadialGeometry.NO_SLOT, RadialGeometry.slotInArc(180.0, 330.0, 60.0, 2));
+    }
+
+    @Test
+    public void aFullArcIsTheSameWheelAsBefore() {
+        // The main ring expressed as an arc: it starts half a sector before the top and goes all the way round, so
+        // every angle lands in the slot the old full-circle maths would have given it.
+        for (int slotCount = 2; slotCount <= 24; slotCount++) {
+            double start = -RadialGeometry.sectorSpan(slotCount) / 2.0;
+            for (double angle = 0.0; angle < 360.0; angle += 0.5) {
+                assertEquals(
+                    "slotCount=" + slotCount + " angle=" + angle,
+                    RadialGeometry.slotAtAngle(angle, slotCount, 0.0),
+                    RadialGeometry.slotInArc(angle, start, 360.0, slotCount));
+            }
+        }
+    }
+
+    @Test
+    public void everyArcSlotFindsItselfBackFromItsOwnMiddle() {
+        for (int slotCount = 1; slotCount <= 12; slotCount++) {
+            for (int slot = 0; slot < slotCount; slot++) {
+                double center = RadialGeometry.arcSlotCenter(slot, slotCount, 100.0, 140.0);
+                assertEquals(slot, RadialGeometry.slotInArc(center, 100.0, 140.0, slotCount));
+            }
+        }
+    }
 }
