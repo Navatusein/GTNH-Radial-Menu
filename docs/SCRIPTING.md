@@ -99,8 +99,144 @@ and unpleasant for fifty. The practical loop is an external editor on the profil
 | `player.name` | The player's name. |
 | `player.dim` | Dimension id. |
 | `player.x`, `player.y`, `player.z` | Block coordinates, floored. |
+| `player.chunkX`, `player.chunkZ` | The chunk those coordinates fall in. Negative blocks work the way the game means them: block `-200` is chunk `-13`. |
+| `player.xInChunk`, `player.zInChunk` | Where in that chunk, `0`–`15`. |
+| `player.facing` | `"north"`, `"south"`, `"east"` or `"west"` — whichever quarter of the compass the player is looking into. |
+| `player.yaw` | `0`–`360`. Minecraft's convention, so **`0` is south**, `90` west, `180` north, `270` east. Normalised, so turning around a few times does not change the number you compare against. |
+| `player.pitch` | `-90` (straight up) to `90` (straight down), `0` level. |
 
-Read when touched, so after a teleport the next read is the new position.
+Read when touched, so after a teleport the next read is the new position — and the next read of `yaw` is wherever
+the mouse has got to since.
+
+```lua
+notify(("%s at %d,%d,%d in chunk %d,%d, facing %s")
+  :format(player.name, player.x, player.y, player.z, player.chunkX, player.chunkZ, player.facing))
+```
+
+### `chunk.of(world)`, `chunk.offset(world)`, `chunk.toWorld(chunk, offset)`
+
+The same arithmetic for *any* coordinate, not only the player's — for a position a script read out of a chat line,
+say. `chunk.size` is 16.
+
+| Call | Gives |
+|---|---|
+| `chunk.of(-200)` | `-13` — the chunk that block is in. |
+| `chunk.offset(-200)` | `8` — how far into it. |
+| `chunk.toWorld(-13, 8)` | `-200` — the two put back together. |
+| `chunk.toWorld(-13)` | `-208` — the chunk's own corner; the offset defaults to 0. |
+
+The offset is not clamped: `chunk.toWorld(5, 19)` is the block four past that chunk's edge, which is what a script
+doing its own arithmetic means by it.
+
+These are the only calls in the API that **do not suspend** — they ask the game nothing, so they return there and
+then and may be used in a loop without spending a tick a turn.
+
+```lua
+-- The middle of the chunk the player is standing in
+local x = chunk.toWorld(player.chunkX, 8)
+local z = chunk.toWorld(player.chunkZ, 8)
+chat.send(("/tp %d %d %d"):format(x, player.y, z))
+```
+
+### `player.health`, `player.food`, `player.air`, `player.held`
+
+| Field | Value |
+|---|---|
+| `player.health` | Hearts as the game counts them: `20` is full. |
+| `player.food` | Hunger, `0`–`20`. |
+| `player.air` | Breath under water, in ticks. `300` when full. |
+| `player.held` | What is in your hand as an item table (below), or `nil` for an empty one. |
+
+### `world`
+
+| Field | Value |
+|---|---|
+| `world.time` | Ticks since this morning, `0`–`23999`. Dawn is `0`, dusk `12000`. |
+| `world.day` | How many days the world has seen, the first being `0`. |
+| `world.isDay` | `true` while the sun is up — `world.time < 12000`. |
+| `world.name` | The server's address, or the save's folder in single player. The same string a profile's auto-bind rules match on. |
+
+### `world.lookingAt()`
+
+What the crosshair is on, or `nil` for thin air. A block and an entity come back as the same shape, with `kind`
+saying which:
+
+| Field | Value |
+|---|---|
+| `kind` | `"block"` or `"entity"` |
+| `id` | Registry name — `minecraft:furnace`, `gregtech:machine` — or the entity's type. |
+| `label` | What the game calls it, translated. |
+| `meta` | The block's damage value. `0` for an entity. |
+| `x`, `y`, `z` | Block position, or the entity's own, floored. |
+
+```lua
+local t = world.lookingAt()
+if t and t.kind == "block" then
+  notify(("%s at %d %d %d"):format(t.label, t.x, t.y, t.z))
+end
+```
+
+### `inventory`
+
+Your own inventory, hotbar included, as the client already knows it — nothing is asked of the server.
+
+| Call | Gives |
+|---|---|
+| `inventory.count(id)` | How many you are carrying, every damage value together. |
+| `inventory.count(id, meta)` | Only that variant. |
+| `inventory.has(id)` / `inventory.has(id, meta)` | The same question as a boolean. |
+| `inventory.items()` | A list of item tables, empty slots left out. |
+
+The damage value is compared **only when you name one**: a pickaxe half worn through is still a pickaxe. Name it
+where the value is the difference — wool, dye, a GregTech meta item.
+
+An item table is:
+
+| Field | Value |
+|---|---|
+| `id`, `meta`, `count` | Registry name, damage value, stack size. |
+| `label` | The name the game prints. |
+| `slot` | Where it sits, counted from 1. The hotbar is 1–9. `0` for a held item. |
+| `icon` | The same stack spelled as an icon, so a listing can be opened as a wheel unchanged. |
+
+```lua
+local items = {}
+for _, item in ipairs(inventory.items()) do
+  if item.count >= 16 then
+    items[#items + 1] = { key = item.id, label = item.label, icon = item.icon }
+  end
+end
+menu.open(items, { title = "Stacks" })
+```
+
+### `store.get(key [, default])`, `store.set(key, value)`
+
+What a script remembers between runs, in `RadialMenu/script-store.json`.
+
+**Strings both ways.** A script that wants a number writes one and reads it back with `tonumber`. `store.set(key,
+nil)` forgets the key. `store.get` answers the second argument when nothing is stored, and `nil` when there is no
+second argument — so a missing key is still testable.
+
+**One store, shared by every script.** Two entries running the same script — a "go home" and a "set home" — want the
+same value, which is the whole point. Prefix your keys (`home.last`, not `last`) so unrelated scripts do not collide.
+
+```lua
+local last = store.get("home.last")
+if last then chat.send("/home " .. last) end
+```
+
+### `prompt(title [, initial])`
+
+Asks the player to type one line, and returns it — or `nil` if they cancelled, which is the same nothing a dismissed
+menu gives. The title is shown as written.
+
+Empty text is refused by the box itself, so a returned string is never blank. The prompt will not open over somebody
+else's screen; it answers `nil` instead of taking it away mid-use.
+
+```lua
+local name = prompt("Name this home", player.name)
+if name then chat.send("/sethome " .. name) end
+```
 
 ### `chat.send(text)`
 

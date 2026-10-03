@@ -90,8 +90,23 @@ public final class LuaSyntax {
 
     /** What a script is handed: see {@code ScriptApi} and the prelude. */
     private static final Set<String> GLOBALS = new HashSet<>(
-        Arrays
-            .asList("chat", "menu", "player", "action", "notify", "log", "sleep", "print", "string", "table", "math"));
+        Arrays.asList(
+            "chat",
+            "menu",
+            "player",
+            "chunk",
+            "world",
+            "inventory",
+            "store",
+            "prompt",
+            "action",
+            "notify",
+            "log",
+            "sleep",
+            "print",
+            "string",
+            "table",
+            "math"));
 
     /**
      * Members worth colouring after a dot.
@@ -116,6 +131,33 @@ public final class LuaSyntax {
             "x",
             "y",
             "z",
+            "chunkX",
+            "chunkZ",
+            "xInChunk",
+            "zInChunk",
+            "yaw",
+            "pitch",
+            "facing",
+            "of",
+            "offset",
+            "lookingAt",
+            "time",
+            "day",
+            "isDay",
+            "items",
+            "count",
+            "has",
+            "get",
+            "set",
+            "health",
+            "food",
+            "air",
+            "held",
+            "meta",
+            "slot",
+            "kind",
+            "toWorld",
+            "size",
             "key",
             "label",
             "icon",

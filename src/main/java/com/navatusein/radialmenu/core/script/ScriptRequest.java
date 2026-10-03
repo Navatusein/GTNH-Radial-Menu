@@ -53,7 +53,19 @@ public final class ScriptRequest {
         NOTIFY,
 
         /** Write a line to the client log. */
-        LOG
+        LOG,
+
+        /** Remember a value under a key, or forget it when the value is null. */
+        STORE_SET,
+
+        /**
+         * Ask the player to type something, and hand back what they typed.
+         *
+         * <p>
+         * A screen, so it blocks exactly the way a menu does - and like a menu, the answer may be nothing at all,
+         * because the player is always allowed to change their mind.
+         */
+        PROMPT
     }
 
     public final Kind kind;
@@ -70,48 +82,61 @@ public final class ScriptRequest {
     /** {@link Kind#ACTION}: what to run. */
     public final ActionSpec action;
 
-    private ScriptRequest(Kind kind, String text, int ticks, MenuNode menu, ActionSpec action) {
+    /** {@link Kind#STORE_SET}: the key being written. {@link Kind#PROMPT}: what the box starts out holding. */
+    public final String key;
+
+    private ScriptRequest(Kind kind, String text, int ticks, MenuNode menu, ActionSpec action, String key) {
         this.kind = kind;
         this.text = text;
         this.ticks = ticks;
         this.menu = menu;
         this.action = action;
+        this.key = key;
     }
 
     public static ScriptRequest send(String text) {
-        return new ScriptRequest(Kind.SEND, text, 0, null, null);
+        return new ScriptRequest(Kind.SEND, text, 0, null, null, null);
     }
 
     public static ScriptRequest notify(String text) {
-        return new ScriptRequest(Kind.NOTIFY, text, 0, null, null);
+        return new ScriptRequest(Kind.NOTIFY, text, 0, null, null, null);
     }
 
     public static ScriptRequest log(String text) {
-        return new ScriptRequest(Kind.LOG, text, 0, null, null);
+        return new ScriptRequest(Kind.LOG, text, 0, null, null, null);
     }
 
     public static ScriptRequest awaitLine(int timeoutTicks) {
-        return new ScriptRequest(Kind.AWAIT_LINE, null, timeoutTicks, null, null);
+        return new ScriptRequest(Kind.AWAIT_LINE, null, timeoutTicks, null, null, null);
     }
 
     public static ScriptRequest sleep(int ticks) {
-        return new ScriptRequest(Kind.SLEEP, null, ticks, null, null);
+        return new ScriptRequest(Kind.SLEEP, null, ticks, null, null, null);
     }
 
     public static ScriptRequest menu(MenuNode menu) {
-        return new ScriptRequest(Kind.MENU, null, 0, menu, null);
+        return new ScriptRequest(Kind.MENU, null, 0, menu, null, null);
     }
 
     public static ScriptRequest menuUpdate(MenuNode menu) {
-        return new ScriptRequest(Kind.MENU_UPDATE, null, 0, menu, null);
+        return new ScriptRequest(Kind.MENU_UPDATE, null, 0, menu, null, null);
     }
 
     public static ScriptRequest menuClose() {
-        return new ScriptRequest(Kind.MENU_CLOSE, null, 0, null, null);
+        return new ScriptRequest(Kind.MENU_CLOSE, null, 0, null, null, null);
     }
 
     public static ScriptRequest action(ActionSpec action) {
-        return new ScriptRequest(Kind.ACTION, null, 0, null, action);
+        return new ScriptRequest(Kind.ACTION, null, 0, null, action, null);
+    }
+
+    /** @param value null to forget the key */
+    public static ScriptRequest storeSet(String key, String value) {
+        return new ScriptRequest(Kind.STORE_SET, value, 0, null, null, key);
+    }
+
+    public static ScriptRequest prompt(String title, String initial) {
+        return new ScriptRequest(Kind.PROMPT, title, 0, null, null, initial);
     }
 
     @Override
@@ -132,6 +157,10 @@ public final class ScriptRequest {
                     + " entries)";
             case ACTION:
                 return kind + "(" + action.type + ")";
+            case STORE_SET:
+                return kind + "(" + key + " = " + text + ")";
+            case PROMPT:
+                return kind + "(" + text + ")";
             default:
                 return kind.toString();
         }
