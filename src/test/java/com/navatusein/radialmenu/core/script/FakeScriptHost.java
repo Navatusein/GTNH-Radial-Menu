@@ -46,6 +46,10 @@ class FakeScriptHost implements ScriptContext {
     int y = 64;
     int z = -200;
 
+    /** Facing west and level, so a test reading either one gets something it can tell apart from nothing. */
+    double yaw = 90.0;
+    double pitch = 0.0;
+
     /**
      * The real instruction budget and entry cap, but not the real wall clock. Twenty milliseconds is a stutter in a
      * warmed-up client; on a cold test JVM on a shared CI runner it is class loading, and a script that did nothing
@@ -158,6 +162,16 @@ class FakeScriptHost implements ScriptContext {
     @Override
     public int blockZ() {
         return z;
+    }
+
+    @Override
+    public double yaw() {
+        return yaw;
+    }
+
+    @Override
+    public double pitch() {
+        return pitch;
     }
 
     @Override

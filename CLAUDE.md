@@ -417,6 +417,22 @@ only `string.match` should interpret, and an item table carrying the author's ow
 line is a chat line, a projected list of labels, and an index back - which is why `onPick` costs the host nothing and
 may itself wait, and why `menu.open` can return a key while the host only ever counts positions.
 
+**The host answers where the player is; everything derived from that is worked out on this side.** `ScriptContext`
+gained a yaw and a pitch and nothing else - the chunk a block belongs to and the compass direction a yaw points in
+are arithmetic, and arithmetic goes in `core/` where a test can reach it rather than into the one interface that
+needs Minecraft to implement it. `Facing` holds the convention in a single place: Minecraft's yaw is unbounded and
+starts at south, which is nobody's idea of a compass, and translating it twice would mean two conventions.
+`ChunkCoords` holds the other one, and `player.chunkX` goes through it rather than shifting on its own, so a
+script asking about its own position and about one it read out of chat cannot get different answers. A shift and a
+mask, never `/ 16` and `% 16`: block -1 is in chunk -1 eight blocks along, and a division towards zero says chunk 0.
+The `chunk` table is also the one corner of the API whose calls do not suspend, because they ask the game nothing. The
+fields reach Lua through a metatable, so they are read at the moment the script looks - a script alive across a
+teleport, or simply across a mouse movement, must not be holding a number from when it started.
+
+**A field the editor does not know about is a field that does not highlight.** `LuaSyntax.MEMBERS` is what colours
+an API call in the script editor, and `ScriptSnippetsTest` checks every snippet against it - so a new member of
+`player` is added in three places or the test says so.
+
 **The host is asked for the next chat line, not for a match.** Putting the matching on the Java side would mean a second
 implementation of Lua patterns, drifting from the one the script can see.
 

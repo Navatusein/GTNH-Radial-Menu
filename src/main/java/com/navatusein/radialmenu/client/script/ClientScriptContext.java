@@ -56,6 +56,18 @@ public final class ClientScriptContext implements ScriptContext {
     }
 
     @Override
+    public double yaw() {
+        EntityPlayer player = player();
+        return player == null ? 0.0 : player.rotationYaw;
+    }
+
+    @Override
+    public double pitch() {
+        EntityPlayer player = player();
+        return player == null ? 0.0 : player.rotationPitch;
+    }
+
+    @Override
     public AccentCoefficients accentCoefficients() {
         return AccentConfig.coefficients();
     }
