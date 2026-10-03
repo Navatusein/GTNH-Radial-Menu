@@ -21,6 +21,27 @@ public class SlotLayout {
         DYNAMIC
     }
 
+    /**
+     * How this menu arrives on screen when it is opened from a parent.
+     *
+     * <p>
+     * {@link #REPLACE} is the wheel this mod has always drawn: the submenu takes the parent's place, and going back
+     * brings the parent back. {@link #INLINE} unfolds it as a ring outside the parent, which stays where it is -
+     * so the entry it came from is still on screen, and several branches can be open at once.
+     *
+     * <p>
+     * A property of the menu rather than of the mod's config, because it is about the shape of one particular wheel
+     * and travels with the profile that describes it.
+     */
+    public enum Opening {
+
+        @SerializedName("replace")
+        REPLACE,
+
+        @SerializedName("inline")
+        INLINE
+    }
+
     public static final int MIN_SLOTS = 2;
     public static final int MAX_SLOTS = 24;
     public static final int DEFAULT_SLOTS = 8;
@@ -29,6 +50,12 @@ public class SlotLayout {
 
     /** Only meaningful for {@link Mode#FIXED}. */
     public int slots = DEFAULT_SLOTS;
+
+    /**
+     * How this menu opens. Only meaningful for a submenu - the root has no parent to open it from, and an inline
+     * root would have nothing to unfold out of.
+     */
+    public Opening opening = Opening.REPLACE;
 
     public static SlotLayout fixed(int slots) {
         SlotLayout layout = new SlotLayout();
@@ -50,10 +77,18 @@ public class SlotLayout {
         return Math.max(MIN_SLOTS, Math.min(MAX_SLOTS, value));
     }
 
+    /** Whether a submenu with this layout unfolds around its parent instead of taking its place. */
+    public boolean isInline() {
+        return opening == Opening.INLINE;
+    }
+
     /** Fills in anything a hand-edited file left out or out of range. */
     public void normalize() {
         if (mode == null) {
             mode = Mode.DYNAMIC;
+        }
+        if (opening == null) {
+            opening = Opening.REPLACE;
         }
         slots = clampSlots(slots);
     }

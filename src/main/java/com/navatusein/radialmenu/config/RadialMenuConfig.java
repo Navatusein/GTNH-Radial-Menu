@@ -37,34 +37,42 @@ public class RadialMenuConfig {
     @Config.Order(3)
     public static boolean rightClickToEdit;
 
+    @Config.Comment("How long the cursor has to rest on a submenu set to open inline before it unfolds, in "
+        + "milliseconds. The cursor crosses every sector between where it was and where it is going, so with no "
+        + "delay at all a sweep across the wheel opens everything it passed. Zero unfolds on contact.")
+    @Config.DefaultInt(150)
+    @Config.RangeInt(min = 0, max = 2000)
+    @Config.Order(4)
+    public static int inlineHoverDelayMs;
+
     @Config.Comment("Keep feeding keyboard and mouse input to the game while the wheel is open, so you can keep moving.")
     @Config.DefaultBoolean(true)
-    @Config.Order(4)
+    @Config.Order(5)
     public static boolean allowInputWhileOpen;
 
     @Config.Comment("Move the mouse cursor to the middle of the screen when the wheel opens.")
     @Config.DefaultBoolean(true)
-    @Config.Order(5)
+    @Config.Order(6)
     public static boolean centerCursorOnOpen;
 
     @Config.Comment("While an action holds an unbound keybinding down, lend it a key code no keyboard can produce. "
         + "Some mods refuse to look at a binding whose key code is 0 - JourneyMap's zoom is one - so without this "
         + "they cannot be driven from the menu at all. Turn it off if a mod misbehaves around it.")
     @Config.DefaultBoolean(true)
-    @Config.Order(6)
+    @Config.Order(7)
     public static boolean lendKeyCodeToUnbound;
 
     @Config.Comment("Allow entries to run Lua scripts. A script is stored in the profile, so a profile copied from "
         + "somebody else brings theirs with it - it can send anything to the server that you could type. Turn this "
         + "off to refuse to run them at all.")
     @Config.DefaultBoolean(true)
-    @Config.Order(7)
+    @Config.Order(8)
     public static boolean enableScripts;
 
     @Config.Comment("Log what the game believes about key and sneak state on every injected press: our own byte, "
         + "LWJGL's answer, the binding's answer, and what a mod asking \"is the player sneaking\" would get. For "
         + "working out why one particular mod does not react. Noisy; leave it off unless you are chasing something.")
     @Config.DefaultBoolean(false)
-    @Config.Order(8)
+    @Config.Order(9)
     public static boolean logKeyState;
 }

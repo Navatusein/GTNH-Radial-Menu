@@ -49,7 +49,7 @@ key can be a mouse button.
 | Keybind | Presses a keybinding, including one with no key assigned. Tap, toggle, or hold for a set time |
 | Command | Sends chat lines or slash commands, with `{player}` `{dim}` `{x}` `{y}` `{z}` placeholders |
 | Profile switch | Switches to another profile, or cycles to the next one |
-| Submenu | Opens a nested wheel with its own slot count, layout and colours |
+| Submenu | Opens a nested wheel with its own slot count, layout and colours - in place of this one, or inline as a ring around it |
 | Chain | Runs several of the above in order, with an optional delay between them |
 | Script | Runs Lua: ask the server something, read its reply, and build a wheel out of what it said |
 

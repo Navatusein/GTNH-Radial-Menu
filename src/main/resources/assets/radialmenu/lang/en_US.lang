@@ -72,6 +72,7 @@ radialmenu.lines.add.tip=Add a line at the end. Enter adds one after the line yo
 radialmenu.lines.hint=Placeholders: {player} {dim} {x} {y} {z}
 
 radialmenu.action.submenu=Submenu
+radialmenu.action.submenu.opening=Opens as
 radialmenu.action.submenu.mode=Slot layout
 radialmenu.action.submenu.slots=Slot count
 radialmenu.action.submenu.ringColor=Ring fill
@@ -85,6 +86,8 @@ radialmenu.wheel.editing=EDIT
 radialmenu.action.keybind.mode.tap=Tap
 radialmenu.action.keybind.mode.toggle=Toggle
 radialmenu.action.keybind.mode.hold=Hold
+radialmenu.action.submenu.opening.replace=Replace
+radialmenu.action.submenu.opening.inline=Inline
 radialmenu.action.submenu.mode.fixed=Fixed
 radialmenu.action.submenu.mode.dynamic=Dynamic
 
@@ -98,6 +101,7 @@ radialmenu.action.keybind.holdTicks.tip=How long Hold keeps the key down. 20 tic
 radialmenu.action.command.delayTicks.tip=Ticks between lines. 0 sends them all at once. 20 ticks is one second.
 radialmenu.action.command.cycle.tip=Send one line per press, advancing through the list, instead of all of them.
 radialmenu.action.sequence.delayTicks.tip=Ticks between steps. 0 runs them all at once.
+radialmenu.action.submenu.opening.tip=Replace takes the screen over, and right-click goes back. Inline unfolds this menu as a ring outside the entry, leaving the parent on screen - point at the entry to open it, and opening another submenu of the same menu folds this one away.
 radialmenu.action.submenu.mode.tip=Fixed keeps every entry at the same angle. Dynamic divides the ring by how many there are.
 radialmenu.action.submenu.slots.tip=How many sectors the ring has when the layout is Fixed.
 radialmenu.action.submenu.ringColor.tip=Color of this submenu's ring. Leave it inherited to use the profile's color.
