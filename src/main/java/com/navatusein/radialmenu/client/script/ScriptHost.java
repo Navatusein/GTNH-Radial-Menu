@@ -13,6 +13,8 @@ import net.minecraft.util.EnumChatFormatting;
 import com.navatusein.radialmenu.RadialMenuMod;
 import com.navatusein.radialmenu.client.action.ActionExecutors;
 import com.navatusein.radialmenu.client.gui.GuiRadialWheel;
+import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.editor.GuiTextPrompt;
 import com.navatusein.radialmenu.core.action.ActionSpec;
 import com.navatusein.radialmenu.core.action.ActionTypes;
 import com.navatusein.radialmenu.core.model.MenuNode;
@@ -85,6 +87,14 @@ public final class ScriptHost {
 
         /** The wheel went away without a choice reaching us. */
         boolean dismissed;
+
+        /** The text box this run put up, while it is still on screen. */
+        GuiTextPrompt prompt;
+
+        /** What the player typed, waiting to be handed over on the next pump. */
+        String typed;
+
+        boolean answered;
 
         Run(String token, ActionSpec owner, ScriptTask task) {
             this.token = token;
@@ -170,6 +180,8 @@ public final class ScriptHost {
     public static void onClientTick() {
         ChatCapture.drain();
         if (RUNS.isEmpty()) {
+            // Still worth a look: a run that wrote to the store on its last tick has left it waiting to be saved.
+            ScriptStore.flush();
             return;
         }
 
@@ -187,6 +199,9 @@ public final class ScriptHost {
 
             pump(run);
         }
+
+        // Once per tick rather than per write, so a script setting ten keys in a row costs one file.
+        ScriptStore.flush();
     }
 
     /** Runs a script until it needs a later tick, or finishes. */
@@ -267,6 +282,14 @@ public final class ScriptHost {
                 closeWheel(run);
                 run.task.resumeVoid();
                 return true;
+
+            case STORE_SET:
+                ScriptStore.set(request.key, request.text);
+                run.task.resumeVoid();
+                return true;
+
+            case PROMPT:
+                return openOrResolvePrompt(run, request);
 
             default:
                 RadialMenuMod.LOG.warn("Unknown script request " + request.kind);
@@ -368,6 +391,74 @@ public final class ScriptHost {
         // Opening replaces whatever was on screen, and a wheel going away reports itself closed - including the one
         // this run had up a moment ago. That closure is this run's own doing, not a dismissal.
         run.dismissed = false;
+        return false;
+    }
+
+    /**
+     * Puts the text box up, or hands over what came back from it.
+     *
+     * <p>
+     * The same shape as a menu, and for the same reason: the answer arrives from a screen rather than from this
+     * call, so the request blocks and is asked again on a later tick. An answer is read before the screen's absence,
+     * because confirming is what closes it - the other order would turn every answer into a cancellation.
+     *
+     * <p>
+     * A screen going away with nothing typed is a cancellation however it went: Escape, the cancel button, or
+     * another mod taking the screen. All three mean the player is not answering, and {@code nil} is what a script
+     * already tests for after a dismissed menu.
+     */
+    private static boolean openOrResolvePrompt(Run run, ScriptRequest request) {
+        if (run.answered) {
+            String typed = run.typed;
+            run.answered = false;
+            run.typed = null;
+            run.prompt = null;
+            run.task.resumeText(typed);
+            return true;
+        }
+
+        Minecraft mc = Minecraft.getMinecraft();
+        if (run.prompt != null) {
+            if (mc.currentScreen == run.prompt) {
+                return false;
+            }
+            run.prompt = null;
+            run.task.resumeText(null);
+            return true;
+        }
+
+        if (mc.thePlayer == null) {
+            run.task.resumeText(null);
+            return true;
+        }
+        // Somebody else's screen is open, exactly as with a menu: taking it away mid-use is worse than not asking.
+        if (mc.currentScreen != null && !(mc.currentScreen instanceof GuiRadialWheel)) {
+            RadialMenuMod.LOG.debug("[" + run.token + "] a screen was open, so the script's prompt was not shown");
+            run.task.resumeText(null);
+            return true;
+        }
+
+        final Run owner = run;
+        // The title goes through the translator, which runs it past String.format on the way out - so a per cent
+        // sign a script wrote for a player to read is doubled here rather than coming out as "Format error".
+        String title = request.text == null ? "" : request.text.replace("%", "%%");
+        GuiTextPrompt prompt = new GuiTextPrompt(title, request.key, new GuiTextPrompt.Result() {
+
+            @Override
+            public String onConfirm(String value) {
+                owner.typed = value;
+                owner.answered = true;
+                // Nothing to object to: whether the text is any good is the script's business, and it is the one
+                // that can say so in chat.
+                return null;
+            }
+        });
+        run.prompt = prompt;
+        // A wheel of this run's own is taken down first rather than pushed under the box. Left up it would be the
+        // screen the prompt returns to when it closes - a wheel nothing is waiting on, belonging to a script that
+        // has moved past it - and closing it here is also what keeps that closure from reading as a dismissal.
+        closeWheel(run);
+        GuiStack.push(prompt);
         return false;
     }
 

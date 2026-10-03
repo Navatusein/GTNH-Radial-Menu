@@ -5,7 +5,9 @@ import static org.junit.Assert.fail;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import com.navatusein.radialmenu.core.action.ActionSpec;
 import com.navatusein.radialmenu.core.model.AccentCoefficients;
@@ -49,6 +51,31 @@ class FakeScriptHost implements ScriptContext {
     /** Facing west and level, so a test reading either one gets something it can tell apart from nothing. */
     double yaw = 90.0;
     double pitch = 0.0;
+
+    double health = 20.0;
+    int food = 20;
+    int air = 300;
+
+    /** Mid-morning of the fourth day, which is a time no arithmetic mistake would land on by accident. */
+    long worldTime = 24000L * 3 + 1000L;
+
+    String worldName = "testserver.example";
+
+    /** What the crosshair is on, or null for thin air. */
+    LookTarget lookingAt;
+
+    ScriptItem held;
+
+    final List<ScriptItem> carried = new ArrayList<>();
+
+    /** What a script has remembered, and what it asked to remember. */
+    final Map<String, String> store = new LinkedHashMap<>();
+
+    /** Answers the prompts, in order. A missing one is the player cancelling. */
+    final Deque<String> typed = new ArrayDeque<>();
+
+    /** Every prompt the script put up, so a test can check what it asked. */
+    final List<String> prompts = new ArrayList<>();
 
     /**
      * The real instruction budget and entry cap, but not the real wall clock. Twenty milliseconds is a stutter in a
@@ -100,6 +127,18 @@ class FakeScriptHost implements ScriptContext {
                 break;
             case SLEEP:
                 task.resumeVoid();
+                break;
+            case STORE_SET:
+                if (request.text == null) {
+                    store.remove(request.key);
+                } else {
+                    store.put(request.key, request.text);
+                }
+                task.resumeVoid();
+                break;
+            case PROMPT:
+                prompts.add(request.text);
+                task.resumeText(typed.isEmpty() ? null : typed.poll());
                 break;
             case ACTION:
                 actions.add(request.action);
@@ -167,6 +206,51 @@ class FakeScriptHost implements ScriptContext {
     @Override
     public double yaw() {
         return yaw;
+    }
+
+    @Override
+    public double health() {
+        return health;
+    }
+
+    @Override
+    public int food() {
+        return food;
+    }
+
+    @Override
+    public int air() {
+        return air;
+    }
+
+    @Override
+    public ScriptItem heldItem() {
+        return held;
+    }
+
+    @Override
+    public List<ScriptItem> inventory() {
+        return carried;
+    }
+
+    @Override
+    public LookTarget lookingAt() {
+        return lookingAt;
+    }
+
+    @Override
+    public long worldTime() {
+        return worldTime;
+    }
+
+    @Override
+    public String worldName() {
+        return worldName;
+    }
+
+    @Override
+    public String storeGet(String key) {
+        return store.get(key);
     }
 
     @Override

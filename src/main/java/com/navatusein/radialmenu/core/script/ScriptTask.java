@@ -150,6 +150,17 @@ public final class ScriptTask {
     }
 
     /**
+     * Answers {@link ScriptRequest.Kind#PROMPT}.
+     *
+     * @param text what the player typed, or null if they cancelled - which is the same nothing a dismissed menu
+     *             returns, so a script can test for it the same way
+     */
+    public void resumeText(String text) {
+        expect(ScriptRequest.Kind.PROMPT);
+        resume(text == null ? LuaValue.NIL : LuaValue.valueOf(text));
+    }
+
+    /**
      * Abandons the run - a timeout, a disconnect, the entry triggered again.
      *
      * <p>
