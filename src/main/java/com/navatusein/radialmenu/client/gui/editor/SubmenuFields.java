@@ -27,6 +27,13 @@ final class SubmenuFields {
         MenuStyle style = node.style;
 
         ActionSpec spec = new ActionSpec(ActionTypes.SUBMENU);
+        // Defaulted here rather than trusted: a node built in code, or one loaded before this field existed, carries
+        // no opening at all and the editor would rather show "replace" than refuse to open.
+        SlotLayout.Opening opening = layout.opening == null ? SlotLayout.Opening.REPLACE : layout.opening;
+        spec.set(
+            ActionTypes.PARAM_OPENING,
+            opening.name()
+                .toLowerCase());
         spec.set(
             ActionTypes.PARAM_SLOT_MODE,
             layout.mode.name()
@@ -49,6 +56,7 @@ final class SubmenuFields {
         ActionSpec spec = node.action;
 
         SlotLayout layout = new SlotLayout();
+        layout.opening = spec.getEnum(ActionTypes.PARAM_OPENING, SlotLayout.Opening.class, SlotLayout.Opening.REPLACE);
         layout.mode = spec.getEnum(ActionTypes.PARAM_SLOT_MODE, SlotLayout.Mode.class, SlotLayout.Mode.FIXED);
         layout.slots = SlotLayout.clampSlots(spec.getInt(ActionTypes.PARAM_SLOT_COUNT, SlotLayout.DEFAULT_SLOTS));
 

@@ -86,6 +86,8 @@ public final class ActionTypes {
     public static final String PARAM_TOKEN = "token";
     /** Which entry of the script's menu was chosen, counted from 1 as Lua counts. */
     public static final String PARAM_CHOICE = "choice";
+    /** Whether a submenu takes the wheel over or unfolds as a ring around the entry it came from. */
+    public static final String PARAM_OPENING = "opening";
     public static final String PARAM_SLOT_MODE = "slotMode";
     public static final String PARAM_SLOT_COUNT = "slots";
     public static final String PARAM_ACCENT = "accent";
@@ -176,6 +178,10 @@ public final class ActionTypes {
                 SUBMENU,
                 "radialmenu.action.submenu",
                 false,
+                // First, because it decides what the player is looking at - the other fields describe a ring either
+                // way, while this one says whether that ring arrives beside its parent or instead of it.
+                ActionField
+                    .enumeration(PARAM_OPENING, "radialmenu.action.submenu.opening", "replace", "replace", "inline"),
                 ActionField.enumeration(PARAM_SLOT_MODE, "radialmenu.action.submenu.mode", "fixed", "fixed", "dynamic"),
                 ActionField.range(
                     PARAM_SLOT_COUNT,
