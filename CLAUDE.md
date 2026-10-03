@@ -282,6 +282,14 @@ flat sprites ignore lighting and look fine, which makes the symptom look selecti
 astray. Drawing an item *after* a vanilla button inherits state that dims it; put a preview beside a button, not on
 it.
 
+**Icon size is the wheel's, not the editors'.** `WheelConfig.effectiveIconSize` is read by `WheelRenderer` and
+nowhere else; `IconRenderer.draw(icon, x, y)` still means sixteen, because its callers are editor cells measured in
+`Ui` and a thirty-two pixel icon in a twenty pixel cell is the setting reaching somewhere it was never about. The
+vanilla slot plates are art cut for a sixteen pixel icon, so they are scaled with it rather than left at eighteen and
+twenty-four. An item has no size parameter at all - `renderItemAndEffectIntoGUI` always draws sixteen - so the size
+goes into the matrix instead: translate, scale uniformly, draw at the origin. Uniformly including depth, because a
+block is geometry and squashing two of its three axes shears it.
+
 The sheet is **baked ahead of time** — 1.7.10's font renderer cannot load a TrueType file, so the glyph approach
 newer radial-menu mods use does not transfer. `tools/GenerateIconAtlas.java` renders it, dependency-free from a JDK.
 **That generator is gitignored** at the author's request, so the committed `phosphor.png` (2048×1024) and

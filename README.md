@@ -57,7 +57,7 @@ key can be a mouse button.
 
 Any item or block from the registry, subtypes included; a sprite from the bundled
 [Phosphor](https://phosphoricons.com/) set; a status effect, vanilla or modded; or your own PNG dropped into
-`RadialMenu/icons`.
+`RadialMenu/icons`. How big they are drawn is a setting.
 
 | Items | Sprites |
 |---|---|

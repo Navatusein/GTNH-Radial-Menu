@@ -506,7 +506,7 @@ public final class WheelRenderer {
             double iconRadius = iconRadius(ring, slot, grows, animator);
             int x = iconLeft(centerX, ring, slot, iconRadius);
             int y = iconTop(centerY, ring, slot, iconRadius);
-            drawTexture(INVENTORY, x - 1, y - 1, 7, 141, 18, 18);
+            drawTexture(INVENTORY, x - scaled(1), y - scaled(1), 7, 141, scaled(18), scaled(18));
         }
 
         if (plate == SlotPlate.SELECTED) {
@@ -540,7 +540,18 @@ public final class WheelRenderer {
      * middle of the ring.
      */
     private static void drawSelection(int x, int y) {
-        drawTexture(WIDGETS, x - 4, y - 4, 0, 22, 24, 24);
+        drawTexture(WIDGETS, x - scaled(4), y - scaled(4), 0, 22, scaled(24), scaled(24));
+    }
+
+    /**
+     * A measurement vanilla drew against a sixteen pixel icon, at whatever size the icon is now.
+     *
+     * <p>
+     * The plate is art cut for one size, so the only thing it can do at another is keep its proportions - a cell
+     * that stayed eighteen pixels around a thirty-two pixel icon would be a frame drawn inside its own picture.
+     */
+    private static int scaled(int atSixteen) {
+        return Math.max(1, Math.round(atSixteen * WheelConfig.effectiveIconSize() / 16.0F));
     }
 
     /**
@@ -574,12 +585,14 @@ public final class WheelRenderer {
 
     private static int iconLeft(int centerX, WheelRing ring, int slot, double iconRadius) {
         double angle = ring.slotCenter(slot);
-        return (int) Math.round(centerX + RadialGeometry.offsetX(angle, iconRadius)) - IconRenderer.ICON_SIZE / 2;
+        return (int) Math.round(centerX + RadialGeometry.offsetX(angle, iconRadius))
+            - WheelConfig.effectiveIconSize() / 2;
     }
 
     private static int iconTop(int centerY, WheelRing ring, int slot, double iconRadius) {
         double angle = ring.slotCenter(slot);
-        return (int) Math.round(centerY + RadialGeometry.offsetY(angle, iconRadius)) - IconRenderer.ICON_SIZE / 2;
+        return (int) Math.round(centerY + RadialGeometry.offsetY(angle, iconRadius))
+            - WheelConfig.effectiveIconSize() / 2;
     }
 
     /**
@@ -611,8 +624,11 @@ public final class WheelRenderer {
                 continue;
             }
             double iconRadius = iconRadius(ring, slot, grows, animator);
-            IconRenderer
-                .draw(child.icon, iconLeft(centerX, ring, slot, iconRadius), iconTop(centerY, ring, slot, iconRadius));
+            IconRenderer.draw(
+                child.icon,
+                iconLeft(centerX, ring, slot, iconRadius),
+                iconTop(centerY, ring, slot, iconRadius),
+                WheelConfig.effectiveIconSize());
         }
     }
 
