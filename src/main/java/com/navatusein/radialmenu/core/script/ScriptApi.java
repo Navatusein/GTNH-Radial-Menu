@@ -3,6 +3,8 @@ package com.navatusein.radialmenu.core.script;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Collections;
+import java.util.List;
 
 import org.luaj.vm2.Globals;
 import org.luaj.vm2.LuaTable;
@@ -133,6 +135,23 @@ final class ScriptApi {
         });
         globals.set("action", action);
 
+        globals.set("chunk", chunkTable());
+
+        globals.set("world", worldTable(task));
+
+        globals.set("inventory", inventoryTable(task));
+
+        globals.set("store", storeTable(task));
+
+        globals.set("prompt", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                return task.yieldRequest(
+                    ScriptRequest.prompt(args.optjstring(1, "radialmenu.script.prompt"), args.optjstring(2, "")));
+            }
+        });
+
         globals.set("player", playerTable(task));
 
         globals.load(prelude(), "radialmenu-prelude")
@@ -140,12 +159,228 @@ final class ScriptApi {
     }
 
     /**
+     * What the player is looking at, and where.
+     *
+     * <p>
+     * {@code lookingAt} is a function rather than a field, because it is a question with a cost - the crosshair's
+     * target has to be unpacked into something with no Minecraft in it - and because it answers nothing just as
+     * often as it answers something. The rest are fields, read when touched like the player's own.
+     */
+    private static LuaTable worldTable(final ScriptTask task) {
+        LuaTable world = new LuaTable();
+        world.set("lookingAt", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                ScriptContext context = task.context();
+                LookTarget target = context == null ? null : context.lookingAt();
+                if (target == null) {
+                    return LuaValue.NIL;
+                }
+                LuaTable table = new LuaTable();
+                table.set("kind", LuaValue.valueOf(target.kind));
+                table.set("id", LuaValue.valueOf(target.id));
+                table.set("label", LuaValue.valueOf(target.label));
+                table.set("meta", LuaValue.valueOf(target.meta));
+                table.set("x", LuaValue.valueOf(target.x));
+                table.set("y", LuaValue.valueOf(target.y));
+                table.set("z", LuaValue.valueOf(target.z));
+                return table;
+            }
+        });
+
+        LuaTable meta = new LuaTable();
+        meta.set("__index", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                ScriptContext context = task.context();
+                if (context == null) {
+                    return LuaValue.NIL;
+                }
+                String key = args.arg(2)
+                    .tojstring();
+                if ("time".equals(key)) {
+                    return LuaValue.valueOf(WorldTime.timeOfDay(context.worldTime()));
+                }
+                if ("day".equals(key)) {
+                    return LuaValue.valueOf(WorldTime.day(context.worldTime()));
+                }
+                if ("isDay".equals(key)) {
+                    return LuaValue.valueOf(WorldTime.isDay(context.worldTime()));
+                }
+                if ("name".equals(key)) {
+                    return LuaValue.valueOf(context.worldName() == null ? "" : context.worldName());
+                }
+                return LuaValue.NIL;
+            }
+        });
+        world.setmetatable(meta);
+        return world;
+    }
+
+    /**
+     * The player's own inventory, counted and listed.
+     *
+     * <p>
+     * Only their own, and only what the client already has - the mod's whole bargain is that everything it knows is
+     * something the player could have read off their own screen.
+     */
+    private static LuaTable inventoryTable(final ScriptTask task) {
+        LuaTable inventory = new LuaTable();
+        inventory.set("items", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                LuaTable list = new LuaTable();
+                int index = 1;
+                for (ScriptItem item : items(task)) {
+                    list.set(index++, itemTable(item));
+                }
+                return list;
+            }
+        });
+        inventory.set("count", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                return LuaValue.valueOf(total(task, args));
+            }
+        });
+        inventory.set("has", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                return LuaValue.valueOf(total(task, args) > 0);
+            }
+        });
+        return inventory;
+    }
+
+    /**
+     * How many of an item the player is carrying.
+     *
+     * <p>
+     * The damage value is only compared when the script names one: a pickaxe half worn through is still a pickaxe,
+     * and a script asking whether it has one should not have to enumerate the wear. Where the value does mean a
+     * different thing - wool, dye, a GregTech meta item - the script says so and gets exactly that.
+     */
+    private static int total(ScriptTask task, Varargs args) {
+        String id = args.checkjstring(1);
+        boolean byMeta = args.narg() >= 2 && !args.isnil(2);
+        int meta = args.optint(2, 0);
+        int total = 0;
+        for (ScriptItem item : items(task)) {
+            if (item.id.equals(id) && (!byMeta || item.meta == meta)) {
+                total += item.count;
+            }
+        }
+        return total;
+    }
+
+    private static List<ScriptItem> items(ScriptTask task) {
+        ScriptContext context = task.context();
+        return context == null ? Collections.<ScriptItem>emptyList() : context.inventory();
+    }
+
+    /** One stack, shaped so it can be handed straight back to {@code menu.open} as an entry. */
+    private static LuaTable itemTable(ScriptItem item) {
+        LuaTable table = new LuaTable();
+        table.set("id", LuaValue.valueOf(item.id));
+        table.set("meta", LuaValue.valueOf(item.meta));
+        table.set("count", LuaValue.valueOf(item.count));
+        table.set("label", LuaValue.valueOf(item.label));
+        table.set("slot", LuaValue.valueOf(item.slot));
+        // The icon a menu entry would want, spelled the way an icon is spelled, so a listing can be opened as a
+        // wheel without the script having to know how icons are written.
+        table.set("icon", LuaValue.valueOf(item.id + ":" + item.meta));
+        return table;
+    }
+
+    /**
+     * What a script remembers between runs.
+     *
+     * <p>
+     * Reading is a question and answers at once; writing changes a file and goes through the host, which is the only
+     * thread allowed to touch one. Strings both ways - a store that remembered types would have to have an opinion
+     * about what a Lua table is.
+     */
+    private static LuaTable storeTable(final ScriptTask task) {
+        LuaTable store = new LuaTable();
+        store.set("get", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                ScriptContext context = task.context();
+                String value = context == null ? null : context.storeGet(args.checkjstring(1));
+                if (value != null) {
+                    return LuaValue.valueOf(value);
+                }
+                // The second argument is what to answer when nothing is stored, which saves every caller the same
+                // three lines - and it is nil when there is none, so a missing key stays testable.
+                return args.arg(2);
+            }
+        });
+        store.set("set", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                String key = args.checkjstring(1);
+                LuaValue value = args.arg(2);
+                task.yieldRequest(ScriptRequest.storeSet(key, value.isnil() ? null : value.tojstring()));
+                return LuaValue.NONE;
+            }
+        });
+        return store;
+    }
+
+    /**
+     * Converting between a world coordinate and the chunk it lives in.
+     *
+     * <p>
+     * The only functions a script can call that do not suspend, because they are the only ones that ask the game
+     * nothing: a chunk coordinate is arithmetic on a number the script already has. They return there and then, and
+     * a script may use them in a loop without spending a tick on each turn.
+     */
+    private static LuaTable chunkTable() {
+        LuaTable chunk = new LuaTable();
+        chunk.set("of", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                return LuaValue.valueOf(ChunkCoords.chunkOf(args.checkint(1)));
+            }
+        });
+        chunk.set("offset", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                return LuaValue.valueOf(ChunkCoords.offsetOf(args.checkint(1)));
+            }
+        });
+        chunk.set("toWorld", new VarArgFunction() {
+
+            @Override
+            public Varargs invoke(Varargs args) {
+                return LuaValue.valueOf(ChunkCoords.toWorld(args.checkint(1), args.optint(2, 0)));
+            }
+        });
+        chunk.set("size", LuaValue.valueOf(ChunkCoords.SIZE));
+        return chunk;
+    }
+
+    /**
      * Reads the player's position when the script looks at it, through a metatable rather than as fixed fields.
      *
      * <p>
      * A script can be alive across a teleport - that is rather the point of one - so values copied in at launch would
-     * be
-     * a lie by the time they were used.
+     * be a lie by the time they were used. That goes double for where the player is looking, which changes with every
+     * mouse movement rather than only with a teleport.
+     *
+     * <p>
+     * Everything derived - the chunk, the compass direction - is worked out here from what the context already
+     * answers, rather than added to the context. The host's job is to say where the player is; turning that into a
+     * chunk is arithmetic, and arithmetic belongs on this side of the line where a test can reach it.
      */
     private static LuaTable playerTable(final ScriptTask task) {
         LuaTable player = new LuaTable();
@@ -174,6 +409,44 @@ final class ScriptApi {
                 }
                 if ("z".equals(key)) {
                     return LuaValue.valueOf(context.blockZ());
+                }
+                // Which chunk, and where in it - the same arithmetic the chunk table offers a script for any
+                // other coordinate, so the two can never answer differently about the same block.
+                if ("chunkX".equals(key)) {
+                    return LuaValue.valueOf(ChunkCoords.chunkOf(context.blockX()));
+                }
+                if ("chunkZ".equals(key)) {
+                    return LuaValue.valueOf(ChunkCoords.chunkOf(context.blockZ()));
+                }
+                if ("xInChunk".equals(key)) {
+                    return LuaValue.valueOf(ChunkCoords.offsetOf(context.blockX()));
+                }
+                if ("zInChunk".equals(key)) {
+                    return LuaValue.valueOf(ChunkCoords.offsetOf(context.blockZ()));
+                }
+                // Normalised on the way out: a player who has turned around three times carries a yaw in the
+                // hundreds, and a script comparing one against a number should not have to know that.
+                if ("yaw".equals(key)) {
+                    return LuaValue.valueOf(Facing.normalizeYaw(context.yaw()));
+                }
+                if ("pitch".equals(key)) {
+                    return LuaValue.valueOf(context.pitch());
+                }
+                if ("facing".equals(key)) {
+                    return LuaValue.valueOf(Facing.of(context.yaw()));
+                }
+                if ("health".equals(key)) {
+                    return LuaValue.valueOf(context.health());
+                }
+                if ("food".equals(key)) {
+                    return LuaValue.valueOf(context.food());
+                }
+                if ("air".equals(key)) {
+                    return LuaValue.valueOf(context.air());
+                }
+                if ("held".equals(key)) {
+                    ScriptItem held = context.heldItem();
+                    return held == null ? LuaValue.NIL : itemTable(held);
                 }
                 return LuaValue.NIL;
             }
