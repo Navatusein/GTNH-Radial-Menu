@@ -35,6 +35,7 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
 
     private static final int ID_ICON = 1;
     private static final int ID_KEEP_OPEN = 2;
+    private static final int ID_ENTRIES = 3;
 
     private final MenuNode parent;
 
@@ -164,6 +165,23 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
 
         y = buildActionSection(y, left, controlLeft, controlWidth);
 
+        // The way into a submenu's own entry list. It is here rather than only in the middle of the wheel because
+        // an inline submenu has no middle of its own: it unfolds around its entry, so the entry is the only thing
+        // there is to point at. A replacing submenu can still be opened and configured from its own dead zone.
+        if (draft.isCategory()) {
+            y += Ui.GAP;
+            this.buttonList.add(
+                new GuiButton(
+                    ID_ENTRIES,
+                    controlLeft,
+                    y,
+                    controlWidth,
+                    Ui.ROW,
+                    I18n.format("radialmenu.editor.entries", Integer.valueOf(draft.filledCount()))));
+            tooltip(ID_ENTRIES, describe("radialmenu.editor.entries.tip"));
+            y += Ui.STEP;
+        }
+
         setContentHeight(y - scrolledTop() + Ui.PAD);
         addBottomBar("radialmenu.editor.save", "radialmenu.editor.delete", "gui.cancel");
     }
@@ -183,6 +201,9 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
             case ID_ICON:
                 captureInputs();
                 GuiStack.push(new GuiIconPicker(this, draft.icon == null ? null : draft.icon.color));
+                return;
+            case ID_ENTRIES:
+                openEntries();
                 return;
             case ID_KEEP_OPEN:
                 ((UiCheckbox) button).toggle();
@@ -204,6 +225,18 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
     }
 
     private void save() {
+        write();
+        GuiStack.closeAll();
+    }
+
+    /**
+     * Turns the draft into the entry and writes the profile, without closing anything.
+     *
+     * <p>
+     * Split out of {@link #save()} so the way into a submenu's entry list can save first and stay: everything that
+     * decides what this slot *is* happens here, and whether the editor closes afterwards is the caller's business.
+     */
+    private MenuNode write() {
         captureInputs();
 
         draft.action = spec;
@@ -218,17 +251,39 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
         }
 
         draft.normalize();
-        apply(draft);
+        store(draft);
+        return draft;
+    }
+
+    /**
+     * Writes this slot and opens the list of what is inside it.
+     *
+     * <p>
+     * Saved first, deliberately. The two screens edit the same node - this one its shape and colours, that one its
+     * entries - and leaving both open would mean whichever was saved last quietly undid the other. One owner at a
+     * time, and the tooltip says so.
+     */
+    private void openEntries() {
+        MenuNode node = write();
+        if (node == null || !node.isCategory()) {
+            return;
+        }
+        GuiStack.push(new GuiMenuSettings(node));
     }
 
     private void apply(MenuNode node) {
+        store(node);
+        // Editing is finished, so the wheel closes with the editor instead of reappearing beneath it.
+        GuiStack.closeAll();
+    }
+
+    /** Puts a node in this slot and saves the profile. Null is how an entry is deleted. */
+    private void store(MenuNode node) {
         parent.setChildAt(childIndex, node);
         ProfileManager.active()
             .normalize();
         ProfileManager.saveActive();
         IconRenderer.clearCache();
-        // Editing is finished, so the wheel closes with the editor instead of reappearing beneath it.
-        GuiStack.closeAll();
     }
 
     @Override
