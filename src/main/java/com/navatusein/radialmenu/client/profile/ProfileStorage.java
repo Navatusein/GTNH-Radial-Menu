@@ -28,15 +28,29 @@ import com.navatusein.radialmenu.core.model.Profile;
  *
  * <p>
  * Writes go through a temporary file and a rename, so an interrupted save cannot leave a half-written profile behind.
+ * That protects against a save that stops halfway; it protects against nothing a save that completes. The previous
+ * few versions are kept under {@code RadialMenu/backups} for the other case - an editor that wrote exactly what it
+ * was told to and destroyed something the player wanted.
  */
 public final class ProfileStorage {
 
     private static final Charset UTF_8 = Charset.forName("UTF-8");
 
     private static final String PROFILES_DIR = "profiles";
+    private static final String BACKUPS_DIR = "backups";
     private static final String ICONS_DIR = "icons";
     private static final String SETTINGS_FILE = "settings.json";
     private static final String PROFILE_SUFFIX = ".json";
+
+    /**
+     * How many previous versions of a profile are kept.
+     *
+     * <p>
+     * Three, because the mistakes this is for are noticed within a step or two - a slot saved as the wrong type, a
+     * submenu converted, an entry removed - and a deeper history would mostly be a folder nobody reads. A profile
+     * is a few kilobytes, so the cost is not what decides it.
+     */
+    private static final int KEEP_BACKUPS = 3;
 
     private static File rootDir;
 
@@ -56,6 +70,18 @@ public final class ProfileStorage {
 
     public static File profilesDir() {
         return new File(rootDir, PROFILES_DIR);
+    }
+
+    /**
+     * Previous versions of each profile.
+     *
+     * <p>
+     * Beside the profiles rather than inside them, so nothing that lists the folder has to know to skip it - and
+     * as ordinary {@code .json} files, because the only thing anyone ever wants from a backup is to open it or copy
+     * it back by hand.
+     */
+    public static File backupsDir() {
+        return new File(rootDir, BACKUPS_DIR);
     }
 
     /** Where players drop their own PNG icons. */
@@ -120,12 +146,22 @@ public final class ProfileStorage {
             return false;
         }
         File target = profileFile(profile.name);
+        String json = ConfigCodec.writeProfile(profile);
+
+        // An editor saves whenever it closes, which is far more often than anything actually changes. Writing the
+        // same bytes again would cost nothing on its own - but it would push a real previous version out of the
+        // window of kept copies, which is the one thing the window is for.
+        if (json.equals(read(target))) {
+            return true;
+        }
+        rotateBackups(profile.name);
+
         File temp = new File(target.getParentFile(), target.getName() + ".tmp");
         Writer writer = null;
         try {
             mkdirs(target.getParentFile());
             writer = new OutputStreamWriter(new FileOutputStream(temp), UTF_8);
-            writer.write(ConfigCodec.writeProfile(profile));
+            writer.write(json);
             writer.close();
             writer = null;
             return replace(temp, target);
@@ -137,6 +173,89 @@ public final class ProfileStorage {
         }
     }
 
+    /**
+     * Moves the profile as it stands into the backups, pushing the older copies along one.
+     *
+     * <p>
+     * Copied rather than renamed: the live file has to stay where it is until the new one has been written, or a
+     * failed write would leave the player with no profile at all and a backup they have to find.
+     *
+     * <p>
+     * A failure here is logged and ignored. A backup is insurance, and insurance that refuses the save it was
+     * protecting would be worse than none.
+     */
+    private static void rotateBackups(String name) {
+        File live = profileFile(name);
+        if (!live.isFile() || KEEP_BACKUPS <= 0) {
+            return;
+        }
+        mkdirs(backupsDir());
+
+        File oldest = backupFile(name, KEEP_BACKUPS);
+        if (oldest.exists() && !oldest.delete()) {
+            RadialMenuMod.LOG.warn("Could not drop the oldest backup " + oldest.getName());
+            return;
+        }
+        for (int age = KEEP_BACKUPS - 1; age >= 1; age--) {
+            File from = backupFile(name, age);
+            if (from.isFile()) {
+                from.renameTo(backupFile(name, age + 1));
+            }
+        }
+        copy(live, backupFile(name, 1));
+    }
+
+    /** @param age 1 is the version saved over most recently */
+    private static File backupFile(String name, int age) {
+        return new File(backupsDir(), sanitize(name) + "." + age + PROFILE_SUFFIX);
+    }
+
+    private static void copy(File from, File to) {
+        String content = read(from);
+        if (content == null) {
+            return;
+        }
+        Writer writer = null;
+        try {
+            writer = new OutputStreamWriter(new FileOutputStream(to), UTF_8);
+            writer.write(content);
+        } catch (IOException e) {
+            RadialMenuMod.LOG.warn("Could not write the backup " + to.getName(), e);
+        } finally {
+            close(writer);
+        }
+    }
+
+    /** The whole of a file, or null when there is not one to read. */
+    private static String read(File file) {
+        if (file == null || !file.isFile()) {
+            return null;
+        }
+        Reader reader = null;
+        try {
+            reader = new InputStreamReader(new FileInputStream(file), UTF_8);
+            StringBuilder text = new StringBuilder();
+            char[] buffer = new char[4096];
+            int got;
+            while ((got = reader.read(buffer)) > 0) {
+                text.append(buffer, 0, got);
+            }
+            return text.toString();
+        } catch (IOException e) {
+            RadialMenuMod.LOG.warn("Could not read " + file.getName(), e);
+            return null;
+        } finally {
+            close(reader);
+        }
+    }
+
+    /**
+     * Deletes a profile, and leaves its backups where they are.
+     *
+     * <p>
+     * Deliberately. A profile deleted by mistake is exactly the case the backups exist for, and taking them along
+     * with it would make the one moment they are needed the one moment they are gone.
+     */
     public static boolean deleteProfile(String name) {
         return profileFile(name).delete();
     }
@@ -170,6 +289,15 @@ public final class ProfileStorage {
             temp.renameTo(source);
             RadialMenuMod.LOG.error("Could not rename " + temp.getName() + " to " + target.getName());
             return false;
+        }
+
+        // The history follows the name. Left behind, it would be a set of files named after a profile that no
+        // longer exists, next to a profile whose past looks empty.
+        for (int age = 1; age <= KEEP_BACKUPS; age++) {
+            File backup = backupFile(from, age);
+            if (backup.isFile()) {
+                backup.renameTo(backupFile(to, age));
+            }
         }
         return true;
     }

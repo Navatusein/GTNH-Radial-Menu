@@ -15,8 +15,18 @@ sit in which sectors, what each one does, and what the wheel looks like.
 ├── profiles/
 │   ├── default.json       one file per profile
 │   └── mining.json
+├── backups/
+│   ├── default.1.json     the version each save wrote over, newest first
+│   └── default.2.json
+├── cache/
+│   └── heads/             player faces, kept for when they log off
 └── icons/                 PNG files for kind "file" icons
 ```
+
+**The last three versions of every profile are kept** in `backups/`, written whenever a save changes something — a
+save that writes the same bytes again is skipped, so closing an editor five times does not spend the history. They
+are ordinary profile files: to go back, copy one over the live file and run `/radialmenu reload`. Deleting a profile
+leaves its backups behind, which is the case they exist for; renaming takes them along.
 
 Not in `config/`. The file name is the profile name, with `\ / : * ? " < > |` replaced by `_`. Keep the `name` field
 inside the file equal to the file name — the mod matches profiles by file name, and a mismatch means the name shown
