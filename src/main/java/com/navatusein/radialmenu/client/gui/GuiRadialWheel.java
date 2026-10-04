@@ -232,7 +232,7 @@ public class GuiRadialWheel extends GuiScreen {
 
         drawRings(centerX, centerY, colors, editMode);
 
-        WheelRenderer.drawHeader(this.width, ProfileManager.activeName(), breadcrumb(), editMode);
+        WheelRenderer.drawHeader(this.width, ProfileManager.activeName(), breadcrumb(), editMode, scripted);
         // Only while the cursor is actually in the dead zone: elsewhere the centre belongs to the hovered entry's
         // name, and the two were drawing on top of each other.
         if (editMode && pointerSlot == RadialGeometry.NO_SLOT) {

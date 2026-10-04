@@ -729,8 +729,16 @@ public final class WheelRenderer {
      * <p>
      * These used to sit in the middle of the ring, where they competed with the hovered entry's name and moved the
      * one thing the player is actually reading while aiming.
+     *
+     * <p>
+     * A script's wheel says so, in the badge's own shape: the profile name beside it is where the entry lives, not
+     * where these sectors came from, and a wheel built for one choice looks exactly like a configured one otherwise -
+     * down to a title the script chose. It matters because nothing about it can be edited and it is gone the moment it
+     * is answered, so a player trying to shift-click a sector is owed the reason it does nothing. Never both badges at
+     * once: a script's wheel has no edit mode to be in.
      */
-    public static void drawHeader(int screenWidth, String profileName, String breadcrumb, boolean editMode) {
+    public static void drawHeader(int screenWidth, String profileName, String breadcrumb, boolean editMode,
+        boolean scripted) {
         FontRenderer font = Minecraft.getMinecraft().fontRenderer;
 
         String left = EnumChatFormatting.GRAY + profileName;
@@ -747,6 +755,11 @@ public final class WheelRenderer {
                 .append(EnumChatFormatting.GOLD)
                 .append(EnumChatFormatting.BOLD)
                 .append(I18n.format("radialmenu.wheel.editing"));
+        } else if (scripted) {
+            line.append("   ")
+                .append(EnumChatFormatting.AQUA)
+                .append(EnumChatFormatting.BOLD)
+                .append(I18n.format("radialmenu.wheel.scripted"));
         }
 
         String text = line.toString();

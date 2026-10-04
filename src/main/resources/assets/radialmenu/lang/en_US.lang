@@ -107,6 +107,7 @@ radialmenu.editor.sectionAction=Action
 radialmenu.editor.newEntry=New entry
 radialmenu.editor.inherit=Inherit
 radialmenu.wheel.editing=EDIT
+radialmenu.wheel.scripted=SCRIPT
 
 radialmenu.action.keybind.mode.tap=Tap
 radialmenu.action.keybind.mode.toggle=Toggle
