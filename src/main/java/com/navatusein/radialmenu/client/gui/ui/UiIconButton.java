@@ -27,7 +27,11 @@ public class UiIconButton extends GuiButton {
         /** A triangle pointing up, for moving an entry earlier. */
         UP,
         /** A triangle pointing down. */
-        DOWN
+        DOWN,
+        /** Two offset squares, for making a copy of something. */
+        COPY,
+        /** A triangle pointing right, for sending something somewhere else. */
+        RIGHT
     }
 
     /** Across the mark, in pixels. Even on purpose: an odd size cannot sit centred on an even button. */
@@ -62,6 +66,12 @@ public class UiIconButton extends GuiButton {
             case DOWN:
                 drawTriangle(centerX, centerY, colour, false);
                 break;
+            case COPY:
+                drawCopy(centerX, centerY, colour);
+                break;
+            case RIGHT:
+                drawRightTriangle(centerX, centerY, colour);
+                break;
             default:
                 break;
         }
@@ -84,6 +94,42 @@ public class UiIconButton extends GuiButton {
             int y = pointingUp ? centerY - rows / 2 + row : centerY + rows / 2 - row;
             Gui.drawRect(centerX - halfWidth, y, centerX + halfWidth, y + 1, colour);
         }
+    }
+
+    /**
+     * The same triangle lying on its side.
+     *
+     * <p>
+     * Written out rather than folded into {@link #drawTriangle}: that one keeps an up and a down button in the same
+     * band so a pair lines up, which is an argument about rows and has nothing to say about a sideways mark.
+     */
+    private static void drawRightTriangle(int centerX, int centerY, int colour) {
+        int columns = SIZE / 2;
+        for (int column = 0; column < columns; column++) {
+            int halfHeight = columns - column;
+            int x = centerX - columns / 2 + column;
+            Gui.drawRect(x, centerY - halfHeight, x + 1, centerY + halfHeight, colour);
+        }
+    }
+
+    /**
+     * Two squares, one behind the other.
+     *
+     * <p>
+     * Outlines rather than fills, and the back one drawn first: a copy mark is only legible if the two shapes read as
+     * two, which they stop doing the moment either is solid at this size.
+     */
+    private static void drawCopy(int centerX, int centerY, int colour) {
+        int side = SIZE - 1;
+        outline(centerX - side / 2 - 1, centerY - side / 2 - 1, side, colour);
+        outline(centerX - side / 2 + 2, centerY - side / 2 + 2, side, colour);
+    }
+
+    private static void outline(int x, int y, int side, int colour) {
+        Gui.drawRect(x, y, x + side, y + 1, colour);
+        Gui.drawRect(x, y + side - 1, x + side, y + side, colour);
+        Gui.drawRect(x, y, x + 1, y + side, colour);
+        Gui.drawRect(x + side - 1, y, x + side, y + side, colour);
     }
 
     /**
