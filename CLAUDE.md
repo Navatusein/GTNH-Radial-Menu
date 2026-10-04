@@ -228,6 +228,19 @@ arithmetic. Put anything positional in `Ui`, never in a screen.
 minus title, icon and keep-open — those belong to the entry that owns the chain, not to an action. A submenu is
 offered on a slot and not as a step, because it has no executor: it is a shape, not something to run.
 
+**The menu settings screen writes nothing until it is saved, moves included.** Its entry list is a working copy, so
+reordering, duplicating and removing are all undone by Cancel. A move to another menu is the one that could break
+that rule, because its other half lives on a node this screen does not own: writing the entry into its new menu on
+the spot and only removing it here on save would leave it in both places the moment the player changed their mind.
+So a move is queued and both halves happen in `save()` - and the queue is drawn under the list, because a row that
+vanished on a click is otherwise a row the player has to take on trust.
+
+Removing an entry leaves a null in its position rather than closing the list up, which is what the slot editor's own
+delete does: a fixed wheel keeps every other entry on the angle the player memorised, and the next entry added reuses
+the gap. Duplicating follows the same rule from the other side - on a dynamic wheel the copy goes straight after the
+original, on a fixed one it takes the first free position, because inserting would shift every entry after it onto a
+different sector.
+
 **Never mutate `buttonList` inside `actionPerformed`.** `GuiScreen.mouseClicked` walks the list by index and re-reads
 `size()` every iteration, calling `actionPerformed` from inside that loop — so replacing the list mid-click makes the
 loop continue over the new buttons and fire them too. Adding an auto-bind rule that way inserted two buttons ahead of

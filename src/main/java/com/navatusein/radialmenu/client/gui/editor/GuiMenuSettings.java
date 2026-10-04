@@ -46,8 +46,14 @@ public class GuiMenuSettings extends UiScreen {
     private static final int ID_CLEAR_BASE = 100;
     private static final int ID_UP_BASE = 200;
     private static final int ID_DOWN_BASE = 300;
+    private static final int ID_COPY_BASE = 400;
+    private static final int ID_DELETE_BASE = 500;
+    private static final int ID_MOVE_BASE = 600;
 
     private static final int ARROW = 18;
+
+    /** Between the group that changes what an entry is and the group that changes where it sits. */
+    private static final int GROUP_GAP = 6;
 
     private final MenuNode menu;
 
@@ -99,6 +105,16 @@ public class GuiMenuSettings extends UiScreen {
     private final List<Integer> rowIndices = new ArrayList<>();
 
     private final UiDragReorder drag = new UiDragReorder();
+
+    /**
+     * Entries on their way to another menu, applied when this screen is saved.
+     *
+     * <p>
+     * Deferred for the same reason the reordering is: nothing a player does here touches the profile until they say
+     * so. Writing the entry into its new menu on the spot and only removing it from this one on save would leave it
+     * in both places the moment they changed their mind, which is the one outcome a move must never have.
+     */
+    private final List<MenuNode[]> pendingMoves = new ArrayList<>();
 
     private int generalSectionTop;
     private int entriesSectionTop;
@@ -238,6 +254,27 @@ public class GuiMenuSettings extends UiScreen {
                 continue;
             }
 
+            GuiButton move = new UiIconButton(
+                ID_MOVE_BASE + i,
+                rowButtonsLeft(),
+                y,
+                ARROW,
+                Ui.ROW,
+                UiIconButton.Icon.RIGHT);
+            GuiButton copy = new UiIconButton(
+                ID_COPY_BASE + i,
+                rowButtonsLeft() + ARROW + 2,
+                y,
+                ARROW,
+                Ui.ROW,
+                UiIconButton.Icon.COPY);
+            GuiButton delete = new UiIconButton(
+                ID_DELETE_BASE + i,
+                rowButtonsLeft() + (ARROW + 2) * 2,
+                y,
+                ARROW,
+                Ui.ROW,
+                UiIconButton.Icon.CROSS);
             GuiButton up = new UiIconButton(
                 ID_UP_BASE + i,
                 contentRight() - ARROW * 2 - 2,
@@ -254,8 +291,14 @@ public class GuiMenuSettings extends UiScreen {
                 UiIconButton.Icon.DOWN);
             up.enabled = canMove(i, -1);
             down.enabled = canMove(i, 1);
+            this.buttonList.add(move);
+            this.buttonList.add(copy);
+            this.buttonList.add(delete);
             this.buttonList.add(up);
             this.buttonList.add(down);
+            tooltip(ID_MOVE_BASE + i, describe("radialmenu.menu.move.tip"));
+            tooltip(ID_COPY_BASE + i, describe("radialmenu.menu.copy.tip"));
+            tooltip(ID_DELETE_BASE + i, describe("radialmenu.menu.remove.tip"));
 
             rowPositions.add(new int[] { left, y });
             rowNodes.add(child);
@@ -263,8 +306,23 @@ public class GuiMenuSettings extends UiScreen {
             y += Ui.STEP;
         }
 
+        // The queued moves are drawn under the list, so they are part of what scrolls - left out of the height
+        // they would sit outside the clip and be cut off by the frame.
+        y += pendingMoves.size() * 10;
+
         setContentHeight(y - scrolledTop() + Ui.PAD);
         addBottomBar("radialmenu.editor.save", null, "gui.cancel");
+    }
+
+    /**
+     * Where a row's buttons start.
+     *
+     * <p>
+     * Worked out once because the title is cut to fit against it: two copies of this arithmetic is how a name comes
+     * to run under the buttons on one screen and stop short of them on another.
+     */
+    private int rowButtonsLeft() {
+        return contentRight() - ARROW * 5 - 4 - GROUP_GAP;
     }
 
     /** Whether a move would change anything, so a button that cannot act is visibly disabled. */
@@ -342,6 +400,27 @@ public class GuiMenuSettings extends UiScreen {
             return;
         }
 
+        int copyIndex = button.id - ID_COPY_BASE;
+        if (copyIndex >= 0 && copyIndex < workingChildren.size()) {
+            capture();
+            duplicate(copyIndex);
+            requestRebuild();
+            return;
+        }
+        int deleteIndex = button.id - ID_DELETE_BASE;
+        if (deleteIndex >= 0 && deleteIndex < workingChildren.size()) {
+            capture();
+            remove(deleteIndex);
+            requestRebuild();
+            return;
+        }
+        int moveIndex = button.id - ID_MOVE_BASE;
+        if (moveIndex >= 0 && moveIndex < workingChildren.size()) {
+            capture();
+            askWhereToMove(moveIndex);
+            return;
+        }
+
         int index = button.id - ID_FIELD_BASE;
         if (index < 0 || index >= fields.size()) {
             return;
@@ -387,6 +466,91 @@ public class GuiMenuSettings extends UiScreen {
         }
     }
 
+    /**
+     * Puts a copy of an entry beside the original.
+     *
+     * <p>
+     * Where "beside" is depends on the layout, because that is what the player sees. A dynamic wheel is a list, so
+     * the copy goes straight after. A fixed one is a set of angles, and inserting into it would shift every entry
+     * after this one onto a different sector - so the copy takes the first free position instead, and only widens
+     * the wheel when there is none.
+     */
+    private void duplicate(int index) {
+        MenuNode original = workingChildren.get(index);
+        if (original == null) {
+            return;
+        }
+        MenuNode copy = original.copy();
+
+        if (!isFixedLayout()) {
+            workingChildren.add(index + 1, copy);
+            return;
+        }
+        for (int i = index + 1; i < workingChildren.size(); i++) {
+            if (workingChildren.get(i) == null) {
+                workingChildren.set(i, copy);
+                return;
+            }
+        }
+        workingChildren.add(copy);
+    }
+
+    /**
+     * Takes an entry off the wheel, leaving the position it held.
+     *
+     * <p>
+     * The same thing the slot editor's delete does: the position stays as an empty one rather than closing up, so a
+     * fixed wheel keeps every other entry on the angle the player memorised. A dynamic wheel does not draw it at
+     * all, and the next entry added reuses it.
+     *
+     * <p>
+     * Nothing is written until this screen is saved, so a misplaced click is undone by cancelling - which is why
+     * there is no question asked first.
+     */
+    private void remove(int index) {
+        MenuNode removed = workingChildren.get(index);
+        workingChildren.set(index, null);
+        // An entry queued to move into a submenu that is itself being deleted would arrive nowhere.
+        dropMovesInto(removed);
+    }
+
+    private void dropMovesInto(MenuNode gone) {
+        if (gone == null || !gone.isCategory()) {
+            return;
+        }
+        for (int i = pendingMoves.size() - 1; i >= 0; i--) {
+            if (pendingMoves.get(i)[1] == gone) {
+                pendingMoves.remove(i);
+            }
+        }
+    }
+
+    /**
+     * Asks which menu an entry should go to, and queues the move.
+     *
+     * <p>
+     * The row disappears as soon as the destination is chosen, which is how the player sees that the move was taken;
+     * where it has gone is said under the list until the screen is saved.
+     */
+    private void askWhereToMove(final int index) {
+        final MenuNode moved = workingChildren.get(index);
+        if (moved == null) {
+            return;
+        }
+        GuiStack.push(new GuiMenuPicker(menu, moved, new GuiMenuPicker.Result() {
+
+            @Override
+            public void onMenuPicked(MenuNode target) {
+                if (target == null || target == menu) {
+                    return;
+                }
+                workingChildren.set(index, null);
+                pendingMoves.add(new MenuNode[] { moved, target });
+                requestRebuild();
+            }
+        }));
+    }
+
     private void capture() {
         if (titleField != null) {
             titleText = titleField.getText();
@@ -410,6 +574,16 @@ public class GuiMenuSettings extends UiScreen {
         menu.title = title.isEmpty() ? null : title;
 
         menu.children = new ArrayList<>(workingChildren);
+
+        // After this menu's own list, so an entry moving into one of its own submenus is written to a node that is
+        // already where it will stay. Appended through the same position the wheel uses for a new entry, which
+        // reuses an empty position at the end rather than widening a fixed layout by however many it carried.
+        for (MenuNode[] move : pendingMoves) {
+            MenuNode node = move[0];
+            MenuNode target = move[1];
+            target.setChildAt(target.appendIndex(), node);
+            target.ensureSlotCapacity();
+        }
 
         // applyToNode reads the spec off the node, the same way the slot editor hands it over, and clears it
         // afterwards - a category carries no action at any depth.
@@ -494,14 +668,50 @@ public class GuiMenuSettings extends UiScreen {
             String title = child.title == null || child.title.isEmpty() ? I18n.format("radialmenu.menu.untitled")
                 : child.title;
             this.fontRendererObj.drawString(
-                Ui.fit(title, contentWidth() - ARROW * 2 - 28 - UiDragReorder.GRIP),
+                Ui.fit(title, rowButtonsLeft() - iconLeft - 24),
                 iconLeft + 20,
                 position[1] + (Ui.ROW - 8) / 2,
                 Ui.TEXT);
         }
 
+        drawPendingMoves();
+
         drag.drawInsertion(rows(), contentLeft(), contentRight());
         scrollTowardsDrag();
+    }
+
+    /**
+     * Says where entries have gone, for as long as they have not gone there yet.
+     *
+     * <p>
+     * A row that vanished on a click is a row the player has to take on trust. One line under the list saying what
+     * left and where to is the difference between a move and a disappearance.
+     */
+    private void drawPendingMoves() {
+        if (pendingMoves.isEmpty()) {
+            return;
+        }
+        int y = rowPositions.isEmpty() ? entriesSectionTop + 18
+            : rowPositions.get(rowPositions.size() - 1)[1] + Ui.STEP;
+        for (MenuNode[] move : pendingMoves) {
+            if (!isVisibleRow(y)) {
+                y += 10;
+                continue;
+            }
+            this.fontRendererObj.drawString(
+                Ui.fit(I18n.format("radialmenu.menu.movePending", name(move[0]), name(move[1])), contentWidth()),
+                contentLeft(),
+                y + 2,
+                Ui.TEXT_MUTED);
+            y += 10;
+        }
+    }
+
+    private String name(MenuNode node) {
+        if (node == ProfileManager.active().root) {
+            return ProfileManager.activeName();
+        }
+        return node.title == null || node.title.isEmpty() ? I18n.format("radialmenu.menu.untitled") : node.title;
     }
 
     /**
