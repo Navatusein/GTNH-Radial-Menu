@@ -210,6 +210,9 @@ final class ScriptMenus {
         if ("effect".equalsIgnoreCase(kind)) {
             return IconSpec.effect(id);
         }
+        if ("player".equalsIgnoreCase(kind)) {
+            return IconSpec.player(id);
+        }
         // An unknown kind is read as an item, which is also what a missing one means. A table naming a kind nobody
         // recognises is a typo, and an item icon that draws nothing is a better answer than no icon at all.
         return IconSpec.item(id, meta);
