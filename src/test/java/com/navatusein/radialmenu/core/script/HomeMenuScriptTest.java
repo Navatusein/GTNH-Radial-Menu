@@ -278,7 +278,9 @@ public class HomeMenuScriptTest {
                 + "  { key = 'd', icon = 'file:sand.png' },\n"
                 + "  { key = 'e', icon = 'effect:potion.moveSpeed' },\n"
                 + "  { key = 'f', icon = { kind = 'item', id = 'minecraft:wool', meta = 14 } },\n"
-                + "  { key = 'g' },\n"
+                + "  { key = 'g', icon = 'player:Nortcast' },\n"
+                + "  { key = 'h', icon = { kind = 'player', id = 'Nortcast' } },\n"
+                + "  { key = 'i' },\n"
                 + "})\n");
 
         MenuNode menu = host.firstMenu();
@@ -313,9 +315,21 @@ public class HomeMenuScriptTest {
         assertEquals("minecraft:wool", wool.id);
         assertEquals(14, wool.meta);
 
+        // A face is spelled either way round, because a script building one out of a name it read has no business
+        // formatting a prefix by hand.
+        IconSpec spelled = menu.childrenOrEmpty()
+            .get(6).icon;
+        assertEquals(IconSpec.Kind.PLAYER, spelled.kind);
+        assertEquals("Nortcast", spelled.id);
+
+        IconSpec tabled = menu.childrenOrEmpty()
+            .get(7).icon;
+        assertEquals(IconSpec.Kind.PLAYER, tabled.kind);
+        assertEquals("Nortcast", tabled.id);
+
         assertNull(
             menu.childrenOrEmpty()
-                .get(6).icon);
+                .get(8).icon);
     }
 
     @Test
