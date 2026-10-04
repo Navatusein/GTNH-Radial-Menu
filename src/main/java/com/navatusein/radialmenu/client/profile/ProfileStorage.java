@@ -120,8 +120,18 @@ public final class ProfileStorage {
      *         starting, so the caller falls back to a default instead
      */
     public static Profile loadProfile(String name) {
-        File file = profileFile(name);
-        if (!file.isFile()) {
+        return readProfile(profileFile(name), name);
+    }
+
+    /**
+     * Reads one profile file under a name.
+     *
+     * <p>
+     * Taken apart from {@link #loadProfile(String)} so a backup can be read the same way the live file is: a kept
+     * version that only some other reader could open would be a poor sort of insurance.
+     */
+    private static Profile readProfile(File file, String name) {
+        if (file == null || !file.isFile()) {
             return null;
         }
         Reader reader = null;
@@ -208,6 +218,44 @@ public final class ProfileStorage {
     /** @param age 1 is the version saved over most recently */
     private static File backupFile(String name, int age) {
         return new File(backupsDir(), sanitize(name) + "." + age + PROFILE_SUFFIX);
+    }
+
+    /** How many versions back the history goes, at most. */
+    public static int keptVersions() {
+        return KEEP_BACKUPS;
+    }
+
+    public static boolean hasBackup(String name, int age) {
+        return backupFile(name, age).isFile();
+    }
+
+    /** When that version was put aside, as a wall-clock time, or 0 if there is no such version. */
+    public static long backupTime(String name, int age) {
+        File file = backupFile(name, age);
+        return file.isFile() ? file.lastModified() : 0L;
+    }
+
+    /** Reads a kept version without touching the live one, so a screen can say what is in it. */
+    public static Profile loadBackup(String name, int age) {
+        return readProfile(backupFile(name, age), name);
+    }
+
+    /**
+     * Puts a kept version back.
+     *
+     * <p>
+     * Through the ordinary save, which means the profile as it stands right now becomes the newest backup: going
+     * back is itself something to go back from, and a restore that was the one unrecoverable step would be a
+     * strange thing for a recovery feature to be.
+     */
+    public static boolean restoreBackup(String name, int age) {
+        Profile kept = loadBackup(name, age);
+        if (kept == null) {
+            return false;
+        }
+        kept.name = name;
+        kept.normalize();
+        return saveProfile(kept);
     }
 
     private static void copy(File from, File to) {
