@@ -311,13 +311,28 @@ because they came out of a server's reply.
   "type": "script",
   "params": {
     "script": [
-      "chat.send('/home list ' .. player.name)",
-      "local list = chat.await('^' .. player.name .. ': %d+ / %d+: (.+)$')",
-      "if not list then return end",
+      "local playerName = player.name",
+      "",
+      "chat.send(\"/home list \" .. playerName)",
+      "",
+      "local list = chat.await(\"^\" .. playerName .. \": %d+ / %d+: (.+)$\")",
+      "",
+      "if not list then",
+      "  notify(\"no answer from /home list\")",
+      "  return",
+      "end",
+      "",
       "local homes = {}",
-      "for name in list:gmatch('[^,%s]+') do homes[#homes + 1] = name end",
-      "local pick = menu.open(homes, { title = 'Homes', slots = 8 })",
-      "if pick then chat.send('/home ' .. pick .. ' ' .. player.name) end"
+      "",
+      "for name in list:gmatch(\"[^,%s]+\") do",
+      "  homes[#homes + 1] = name",
+      "end",
+      "",
+      "local pick = menu.open(homes, { title = \"Homes\", slots = 8 })",
+      "",
+      "if pick then",
+      "  chat.send(\"/home \" .. pick .. \" \" .. playerName)",
+      "end"
     ]
   }
 }
