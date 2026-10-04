@@ -663,7 +663,9 @@ public class GuiRadialWheel extends GuiScreen {
     @Override
     protected void keyTyped(char typedChar, int keyCode) {
         if (keyCode == 1) {
-            goBackOrClose();
+            // Escape is the way out of a screen, not a step back through it: whatever is unfolded or drilled into,
+            // the player means the wheel. Right-click is what walks back one level.
+            close();
             return;
         }
         // Everything else is intentionally ignored: with allowUserInput set, vanilla is already feeding keys through

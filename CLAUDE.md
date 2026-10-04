@@ -193,6 +193,11 @@ them where its entry is, which is what made this a correction rather than a pref
 all the way down even where nothing is open: a branch left in the set brings back whatever was open inside it the
 next time it is unfolded.
 
+**Escape leaves the screen; right-click walks back through it.** They were one method, so Escape on an unfolded
+branch spent itself folding that branch away and the wheel stayed up - the player asking for the wheel to go away and
+being given one fewer ring. `goBackOrClose` is the step back: the branch under the cursor, then the submenu the wheel
+is inside, then the wheel. Escape calls `close` outright.
+
 **An arc still has to be placed, and `core/geometry/ArcLayout` is the only thing that places one.** It slides
 overlapping arcs apart by half the overlap each, keeping the order they sit in round the circle - an arc that jumped
 past its neighbour to find room would be drawn outside somebody else's entry - and scales an over-full ring down to
