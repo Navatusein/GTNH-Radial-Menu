@@ -65,13 +65,32 @@ function chat.awaitAll(pattern, windowTicks)
   return found
 end
 
--- The list the player is looking at. A choice resolves against this rather than against whatever the script has moved
--- on to, because the player chose from what was on screen.
+-- Every entry the player is looking at, submenus included, in the order the host numbers them. A choice comes back as
+-- one number, and with a tree of entries that number cannot be a position in any one list - so the numbering is kept
+-- here, where the author's own tables are, and the host is told which number each entry it draws carries.
+--
+-- A choice resolves against this rather than against whatever the script has moved on to, because the player chose from
+-- what was on screen.
 local shown = nil
 
-local function normalize(items, level)
+-- What a submenu entry may carry besides its own entries: how it opens, how many sectors, and the colours its ring is
+-- drawn with. Copied by name rather than by handing the author's table over, for the same reason every other field here
+-- is - what crosses the line is what the wheel draws, and nothing else.
+local SUBMENU_OPTIONS = {
+  "opening", "slots", "accent", "ring", "highlight", "border", "highlightBorder", "background",
+}
+
+--- Flattens the entries into `flat`, numbering each as the host will refer to it, and returns the list to draw.
+--
+-- Depth first and parents before children, so a number names the same entry on both sides of the line without either
+-- having to describe the shape of the tree to the other.
+local function normalize(items, level, flat, seen)
   local list = {}
-  local seen = {}
+
+  if #items > menu.maxEntries then
+    log("menu was given " .. #items .. " entries and a wheel holds " .. menu.maxEntries
+      .. "; the rest are not shown - page them with an entry of your own")
+  end
 
   for i = 1, #items do
     local raw = items[i]
@@ -98,17 +117,38 @@ local function normalize(items, level)
     end
     seen[key] = true
 
-    list[i] = { item = item, key = key, label = label, icon = item.icon, color = item.color }
+    local entry = { item = item, key = key, label = label, icon = item.icon, color = item.color }
+    flat[#flat + 1] = entry
+    entry.n = #flat
+
+    -- An entry carrying a list of its own is a submenu. Numbered like any other even though choosing it is the wheel's
+    -- business rather than the script's: a submenu that skipped a number would make the numbering depend on which
+    -- entries happen to have children, which is a thing for both sides to get wrong rather than one.
+    if type(item.items) == "table" and #item.items > 0 then
+      entry.children = normalize(item.items, level, flat, seen)
+    end
+
+    list[i] = entry
   end
 
   return list
 end
 
--- What the host is allowed to see: what to draw, and nothing else. Extra fields, functions and nested tables stay here.
+-- What the host is allowed to see: what to draw, and nothing else. Extra fields, functions and the author's own tables
+-- stay here.
 local function project(list)
   local projected = {}
   for i = 1, #list do
-    projected[i] = { label = list[i].label, icon = list[i].icon, color = list[i].color }
+    local entry = list[i]
+    local out = { n = entry.n, label = entry.label, icon = entry.icon, color = entry.color }
+    if entry.children ~= nil then
+      out.items = project(entry.children)
+      for j = 1, #SUBMENU_OPTIONS do
+        local option = SUBMENU_OPTIONS[j]
+        out[option] = entry.item[option]
+      end
+    end
+    projected[i] = out
   end
   return projected
 end
@@ -123,16 +163,13 @@ function menu.open(items, opts)
     error("menu.open expects a table of entries", 2)
   end
 
-  local list = normalize(items, 3)
+  local flat = {}
+  local list = normalize(items, 3, flat, {})
   if #list == 0 then
     return nil
   end
-  if #list > menu.maxEntries then
-    log("menu was given " .. #list .. " entries and a wheel holds " .. menu.maxEntries
-      .. "; the rest are not shown - page them with an entry of your own")
-  end
 
-  shown = list
+  shown = flat
   local index = host_open(project(list), opts)
   if index == nil then
     return nil
@@ -159,6 +196,8 @@ function menu.update(items)
     error("menu.update expects a table of entries", 2)
   end
 
-  shown = normalize(items, 3)
-  host_update(project(shown))
+  local flat = {}
+  local list = normalize(items, 3, flat, {})
+  shown = flat
+  host_update(project(list))
 end

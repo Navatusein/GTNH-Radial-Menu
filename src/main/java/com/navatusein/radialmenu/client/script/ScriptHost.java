@@ -85,8 +85,19 @@ public final class ScriptHost {
         /** A choice made but not yet handed over - which is how a keepOpen wheel can be clicked twice in a row. */
         Integer choice;
 
-        /** The wheel went away without a choice reaching us. */
-        boolean dismissed;
+        /**
+         * The menu this run has put in front of the player, while it is still waiting for the answer.
+         *
+         * <p>
+         * By identity, and that is what tells the two cases apart: the same {@code MENU} request is handed over again
+         * every tick while the script is suspended inside it, so a menu that is not this one is a new question - which
+         * is how a script that opened a second menu while its first wheel is still up gets a second menu rather than a
+         * wait with nothing on the other end of it.
+         */
+        MenuNode shownMenu;
+
+        /** The inline ring the player folded away - a dismissal with the wheel itself still on screen. */
+        boolean collapsed;
 
         /** The text box this run put up, while it is still on screen. */
         GuiTextPrompt prompt;
@@ -151,7 +162,22 @@ public final class ScriptHost {
         for (Run run : RUNS) {
             if (run.wheel == wheel) {
                 run.wheel = null;
-                run.dismissed = true;
+                return;
+            }
+        }
+    }
+
+    /**
+     * Called by the wheel when an inline ring a script put there is folded away.
+     *
+     * <p>
+     * The wheel stays up, so nothing else would say the question is over: Escape takes the whole screen and reports
+     * itself closed, while a right-click folds one branch and leaves the rest exactly where it was.
+     */
+    public static void inlineCollapsed(GuiRadialWheel wheel) {
+        for (Run run : RUNS) {
+            if (run.wheel == wheel) {
+                run.collapsed = true;
                 return;
             }
         }
@@ -348,26 +374,33 @@ public final class ScriptHost {
      *
      * <p>
      * A choice is read before a dismissal, because closing the wheel is how a choice gets made.
+     *
+     * <p>
+     * A menu that asks to open inline is hung off the entry the player just chose, as a ring around it, instead of
+     * replacing the wheel - which needs that wheel to still be on screen, so the entry it unfolds from was one marked
+     * {@code keepOpen}. Where it is not, the menu is shown as a wheel of its own rather than not at all.
      */
     private static boolean openOrResolveMenu(Run run, MenuNode menu) {
         if (run.choice != null) {
             int choice = run.choice;
             run.choice = null;
-            run.dismissed = false;
+            run.collapsed = false;
+            run.shownMenu = null;
             run.task.resumeChoice(choice);
             return true;
         }
 
         Minecraft mc = Minecraft.getMinecraft();
+        boolean onScreen = run.wheel != null && mc.currentScreen == run.wheel;
 
-        // Already waiting on a wheel of ours: nothing to do until the player acts.
-        if (run.wheel != null && mc.currentScreen == run.wheel) {
-            return false;
-        }
-
-        if (run.dismissed) {
-            run.dismissed = false;
-            run.wheel = null;
+        // This very question is already in front of the player: nothing to do until they answer it one way or the
+        // other. Gone without a choice reaching us - the screen taken, the branch folded - is a dismissal.
+        if (run.shownMenu == menu) {
+            if (onScreen && !run.collapsed) {
+                return false;
+            }
+            run.collapsed = false;
+            run.shownMenu = null;
             run.task.resumeChoice(0);
             return true;
         }
@@ -375,6 +408,20 @@ public final class ScriptHost {
         if (mc.thePlayer == null) {
             run.task.resumeChoice(0);
             return true;
+        }
+
+        if (onScreen) {
+            // Our own wheel, left up by a keepOpen entry. An inline menu unfolds around the entry that was chosen;
+            // anything else takes the wheel over, which is the same thing menu.update does and the only reading of a
+            // second question that does not leave the first wheel up answering nothing.
+            if (menu.layoutOrDefault()
+                .isInline() && run.wheel.attachInline(run.wheel.lastChosen(), menu)) {
+                shown(run, menu);
+                return false;
+            }
+            run.wheel.replaceRoot(menu);
+            shown(run, menu);
+            return false;
         }
 
         // Somebody else's screen is open - a container, the pause menu, another mod's GUI. Opening over it would take
@@ -386,12 +433,18 @@ public final class ScriptHost {
         }
 
         GuiRadialWheel wheel = new GuiRadialWheel(menu);
+        // Set before the screen is shown: opening replaces whatever was on screen, and a wheel going away reports
+        // itself closed - including the one this run had up a moment ago, whose closure is this run's own doing.
         run.wheel = wheel;
+        shown(run, menu);
         mc.displayGuiScreen(wheel);
-        // Opening replaces whatever was on screen, and a wheel going away reports itself closed - including the one
-        // this run had up a moment ago. That closure is this run's own doing, not a dismissal.
-        run.dismissed = false;
         return false;
+    }
+
+    /** The question is now in front of the player, and whatever the last one left behind is spent. */
+    private static void shown(Run run, MenuNode menu) {
+        run.shownMenu = menu;
+        run.collapsed = false;
     }
 
     /**
@@ -468,7 +521,8 @@ public final class ScriptHost {
             mc.displayGuiScreen(null);
         }
         run.wheel = null;
-        run.dismissed = false;
+        run.shownMenu = null;
+        run.collapsed = false;
     }
 
     /**

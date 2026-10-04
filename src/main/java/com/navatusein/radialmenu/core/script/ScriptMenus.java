@@ -32,21 +32,67 @@ final class ScriptMenus {
     static MenuNode build(LuaValue items, LuaValue opts, String token, ScriptContext context, ScriptLimits limits) {
         LuaValue options = opts == null || !opts.istable() ? LuaValue.tableOf() : opts;
 
-        int count = Math.min(items.length(), limits.maxMenuItems);
         boolean keepOpen = options.get("keepOpen")
             .toboolean();
 
-        MenuNode menu = MenuNode.category(blankToNull(options.get("title")), null, layoutOf(options, count));
-        menu.style = styleOf(options, context);
-
-        for (int i = 1; i <= count; i++) {
-            LuaValue item = items.get(i);
-            MenuNode leaf = MenuNode.leaf(blankToNull(item.get("label")), iconOf(item), resumeAction(token, i));
-            leaf.keepOpen = keepOpen;
-            menu.children.add(leaf);
-        }
+        MenuNode menu = MenuNode
+            .category(blankToNull(options.get("title")), null, layoutOf(options, countOf(items, limits)));
+        menu.style = styleOf(options, context, optString(options, "icon"));
+        fill(menu, items, keepOpen, token, context, limits);
 
         return menu;
+    }
+
+    /**
+     * Adds one list of entries to a menu, and the lists hanging off them.
+     *
+     * <p>
+     * An entry carrying an {@code items} list of its own is a submenu rather than a leaf, which is what lets a script
+     * build a wheel with branches - drilling in where it says {@code opening = "replace"}, unfolding as a ring around
+     * the entry where it says {@code "inline"}. It is a plain {@link MenuNode} either way, so the wheel draws and
+     * navigates it exactly as it does a submenu that came out of a profile.
+     *
+     * <p>
+     * A leaf's resume carries the number the prelude gave it, not its position in this list. The two agree for a flat
+     * menu and cannot for a tree: a choice is one number, the entries it has to name are spread over several lists,
+     * and the side that knows which entry a number belongs to is the side holding the author's tables. Counting
+     * positions here as well would be a second numbering to keep in step - and the cap below, which drops the tail of
+     * an over-long list, is exactly where the two would drift apart.
+     */
+    private static void fill(MenuNode parent, LuaValue items, boolean keepOpen, String token, ScriptContext context,
+        ScriptLimits limits) {
+        int count = countOf(items, limits);
+        for (int i = 1; i <= count; i++) {
+            LuaValue item = items.get(i);
+            String label = blankToNull(item.get("label"));
+            LuaValue nested = item.get("items");
+
+            if (nested.istable() && nested.length() > 0) {
+                MenuNode submenu = MenuNode.category(label, iconOf(item), layoutOf(item, countOf(nested, limits)));
+                // No icon tint: on an entry, "icon" is the entry's own picture rather than the colour its
+                // children's icons are drawn in, and reading it as a colour would hand the parser a block name. A
+                // submenu's icon tint inherits, which is what every other unset colour does.
+                submenu.style = styleOf(item, context, null);
+                fill(submenu, nested, keepOpen, token, context, limits);
+                parent.children.add(submenu);
+                continue;
+            }
+
+            MenuNode leaf = MenuNode.leaf(
+                label,
+                iconOf(item),
+                resumeAction(
+                    token,
+                    item.get("n")
+                        .optint(i)));
+            leaf.keepOpen = keepOpen;
+            parent.children.add(leaf);
+        }
+    }
+
+    /** How many of a list's entries a wheel will take. The rest are dropped, which the prelude has already said. */
+    private static int countOf(LuaValue items, ScriptLimits limits) {
+        return Math.min(items.length(), limits.maxMenuItems);
     }
 
     private static ActionSpec resumeAction(String token, int choice) {
@@ -65,10 +111,24 @@ final class ScriptMenus {
     private static SlotLayout layoutOf(LuaValue options, int count) {
         int slots = options.get("slots")
             .optint(0);
-        if (slots <= 0) {
-            return SlotLayout.dynamic();
-        }
-        return SlotLayout.fixed(SlotLayout.clampSlots(Math.max(slots, count)));
+        SlotLayout layout = slots <= 0 ? SlotLayout.dynamic()
+            : SlotLayout.fixed(SlotLayout.clampSlots(Math.max(slots, count)));
+        layout.opening = openingOf(options);
+        return layout;
+    }
+
+    /**
+     * Which of the two ways this menu arrives, read the way a profile spells it.
+     *
+     * <p>
+     * Meaningful on a submenu entry, where it is the same choice a profile makes. Meaningful on {@code menu.open}'s
+     * own options too, and that is not a stretch: an inline menu <em>is</em> a submenu by the time it is on screen -
+     * the host hangs it off the entry the player just chose rather than putting a wheel of its own up. Anything the
+     * script did not spell "inline" replaces, which is also what a missing value means.
+     */
+    private static SlotLayout.Opening openingOf(LuaValue options) {
+        return "inline".equalsIgnoreCase(optString(options, "opening")) ? SlotLayout.Opening.INLINE
+            : SlotLayout.Opening.REPLACE;
     }
 
     /**
@@ -80,7 +140,7 @@ final class ScriptMenus {
      * has
      * to answer. Anything left unset stays null and inherits - profile, then mod config.
      */
-    private static MenuStyle styleOf(LuaValue options, ScriptContext context) {
+    private static MenuStyle styleOf(LuaValue options, ScriptContext context, String iconColor) {
         String ring = optString(options, "ring");
         String highlight = optString(options, "highlight");
         String border = optString(options, "border");
@@ -101,7 +161,7 @@ final class ScriptMenus {
             background = background == null ? Colors.toHex8(derived.background) : background;
         }
 
-        return MenuStyle.of(ring, highlight, optString(options, "icon"), border, highlightBorder, background);
+        return MenuStyle.of(ring, highlight, iconColor, border, highlightBorder, background);
     }
 
     /**
