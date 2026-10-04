@@ -428,6 +428,12 @@ draw call. Newer radial menus use `minecraft:gamemode_switcher/slot`, which is 1
 shipping a copy of it would be redistributing Mojang's files. Cells for every entry first, the selection frame last,
 so the frame overlaps its neighbours instead of being clipped by whichever cell drew after it.
 
+**A script's wheel says so in the header.** It is otherwise indistinguishable from a configured one - same ring, same
+colours, and a title the script chose - while nothing on it can be edited and all of it is gone the moment it is
+answered, so shift-clicking a sector does nothing and the player is owed the reason. The badge sits where `EDIT` sits
+and in the same shape, which costs nothing: `isEditModifierDown` is false on a scripted wheel, so the two can never
+want that space at once.
+
 **Pointing and choosing are separate once `scrollToSelect` is on.** `hoveredSlot` is what is selected — the cursor's
 sector, or whatever the wheel was turned to — while `pointerSlot` is always the cursor's. Editing reads the pointer:
 the dead zone in the middle is the only way into a menu's own settings, and a selection driven by the scroll wheel
