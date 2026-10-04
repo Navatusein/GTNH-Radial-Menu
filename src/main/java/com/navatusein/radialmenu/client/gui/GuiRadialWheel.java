@@ -121,6 +121,25 @@ public class GuiRadialWheel extends GuiScreen {
     private long hoverCandidateSince;
 
     /**
+     * The entry whose action was last fired, for a script to hang its next menu off.
+     *
+     * <p>
+     * A script that answers a choice with another menu is answering <em>that</em> entry, so an inline one unfolds
+     * there. Remembered rather than worked out afterwards: by the time the script asks, the cursor has moved and the
+     * selection may be somewhere else entirely.
+     */
+    private MenuNode lastChosen;
+
+    /**
+     * The entry a script's inline menu was hung off, while the player has not answered it.
+     *
+     * <p>
+     * Kept so folding that branch away can be reported as the dismissal it is. The wheel stays up, so nothing else
+     * would tell the script its question is gone, and it would wait for an answer that can no longer come.
+     */
+    private MenuNode scriptInline;
+
+    /**
      * A wheel a script built, rather than one from the active profile.
      *
      * <p>
@@ -154,6 +173,85 @@ public class GuiRadialWheel extends GuiScreen {
     public void replaceRoot(MenuNode root) {
         path.clear();
         path.push(root);
+        forgetExpanded();
+        lastChosen = null;
+    }
+
+    /**
+     * Hangs a script's menu off one of the entries on screen, as a ring around it.
+     *
+     * <p>
+     * The menu becomes that entry's own submenu - children, layout and colours - which is the whole trick: from here
+     * on it is drawn, aimed at, unfolded and folded away by everything that already handles a submenu out of a
+     * profile. The entry's action goes with it, and is no loss: it was the {@code scriptResume} the player just fired,
+     * and the answer to it is the ring that has taken its place.
+     *
+     * @return false if there is nothing to unfold it from - no such entry on screen, or a selection driven by the
+     *         scroll wheel, which has no way to cross into an inline ring. The caller then shows it as a wheel of its
+     *         own: a worse menu than the script asked for, but a working one.
+     */
+    public boolean attachInline(MenuNode anchor, MenuNode submenu) {
+        if (!scripted || anchor == null
+            || submenu == null
+            || submenu.childrenOrEmpty()
+                .isEmpty()) {
+            return false;
+        }
+        if (RadialMenuConfig.scrollToSelect) {
+            return false;
+        }
+        WheelRing parent = ringHolding(anchor);
+        if (parent == null) {
+            return false;
+        }
+
+        anchor.action = null;
+        anchor.children = new ArrayList<>(submenu.childrenOrEmpty());
+        anchor.layout = submenu.layoutOrDefault();
+        anchor.layout.opening = SlotLayout.Opening.INLINE;
+        anchor.style = submenu.style;
+
+        // Forgotten before the branch is unfolded, because unfolding folds away whichever sibling was open - and the
+        // ring a script put there last is one of the candidates. That question has already been answered; reporting it
+        // dismissed now would dismiss the one being asked.
+        scriptInline = null;
+        expand(parent, anchor);
+        scriptInline = anchor;
+        // The clock of a branch that was never on screen is nothing to keep, and dropping it is what makes this one
+        // arrive rather than appear finished.
+        animators.remove(anchor);
+        sticky = true;
+        return true;
+    }
+
+    /** The entry whose action the player last fired, or null if they have not chosen anything. */
+    public MenuNode lastChosen() {
+        return lastChosen;
+    }
+
+    /** Which ring on screen holds this entry, or null if none does. */
+    private WheelRing ringHolding(MenuNode node) {
+        for (WheelRing ring : rings) {
+            for (MenuNode child : ring.menu.childrenOrEmpty()) {
+                if (child == node) {
+                    return ring;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Folds every branch away at once - the wheel is showing something else now.
+     *
+     * <p>
+     * Through here rather than by clearing the set, because a script may be waiting on one of them: a question whose
+     * ring is gone has to be reported dismissed, or the script waits for an answer nothing can give it.
+     */
+    private void forgetExpanded() {
+        for (MenuNode node : new ArrayList<>(expanded)) {
+            collapse(node);
+        }
         expanded.clear();
     }
 
@@ -462,6 +560,10 @@ public class GuiRadialWheel extends GuiScreen {
             return;
         }
         expanded.remove(node);
+        if (node == scriptInline) {
+            scriptInline = null;
+            ScriptHost.inlineCollapsed(this);
+        }
         for (MenuNode child : node.childrenOrEmpty()) {
             if (child != null && child.isCategory()) {
                 collapse(child);
@@ -708,6 +810,7 @@ public class GuiRadialWheel extends GuiScreen {
             return;
         }
 
+        lastChosen = selected;
         if (selected.keepOpen) {
             sticky = true;
             ActionExecutors.enqueue(selected.action);
@@ -738,7 +841,7 @@ public class GuiRadialWheel extends GuiScreen {
         path.push(selected);
 
         // Whatever was unfolded belonged to the menu that has just left the screen.
-        expanded.clear();
+        forgetExpanded();
         sticky = true;
         // A submenu is a new wheel arriving; one that appeared fully drawn while its neighbours animated would
         // look like something went wrong rather than like a choice.
@@ -771,7 +874,7 @@ public class GuiRadialWheel extends GuiScreen {
 
         if (path.size() > 1) {
             path.pop();
-            expanded.clear();
+            forgetExpanded();
             hoveredRing = 0;
             hoveredSlot = RadialGeometry.NO_SLOT;
         } else {

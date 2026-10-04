@@ -482,6 +482,30 @@ modded one throws on a stack built outside the world it expects - the same hazar
 the same value; strings because a store that remembered types would need an opinion about what a Lua table is;
 flushed on the tick rather than per write because a script may set ten keys in a row and that should cost one file.
 
+**A choice is one number, and a menu with branches is several lists.** An entry carrying its own `items` is a submenu,
+which the wheel then draws, aims at and folds exactly as it does one out of a profile - so the only new question is
+which entry a number names. The prelude numbers every entry of the tree depth first, parents before children, and the
+projection carries the number the host is to answer with; `ScriptMenus` reads it rather than counting positions. It
+counted positions while a menu was one flat list and that was the same number, but the host also drops the tail of an
+over-long list, and a cut inside a branch is exactly where two independent numberings would start naming different
+entries. A submenu takes a number of its own even though nothing can choose it, because a numbering that skipped them
+would depend on which entries happen to have children.
+
+**An inline script menu is a submenu by the time it is on screen.** `opening = "inline"` on `menu.open` makes the host
+hang the menu off the entry the player just chose - `GuiRadialWheel.attachInline` moves the children, layout and
+colours onto that entry and unfolds it - rather than opening a wheel of its own. Which needs that wheel to still be
+there, so the entry was one marked `keepOpen`; where it is not, or under `scrollToSelect`, it opens as an ordinary
+wheel, the same answer the editor's inline submenus give. Folding the ring away has to be reported, because the wheel
+stays up and nothing else would tell the script its question is gone - that is what `scriptInline` and
+`ScriptHost.inlineCollapsed` are for, and why every `expanded.clear()` goes through `forgetExpanded`. The anchor is
+forgotten *before* the branch unfolds: unfolding folds away whichever sibling was open, and the ring a script put there
+last is a candidate.
+
+**The question in front of the player is identified by the menu, not by the screen.** The same `MENU` request is handed
+over again every tick while the script is suspended inside it, so `Run.shownMenu` compared by identity is what tells
+"still waiting on this one" from "a second question" - and a second question while the run's own wheel is up goes into
+that wheel instead of waiting for an answer nothing is being asked for.
+
 **A field the editor does not know about is a field that does not highlight.** `LuaSyntax.MEMBERS` is what colours
 an API call in the script editor, and `ScriptSnippetsTest` checks every snippet against it - so a new member of
 `player` is added in three places or the test says so.
@@ -539,7 +563,8 @@ handles enum casing instead.
 Working: template setup, mixin accessor, `core/` + unit tests, profiles with auto-bind, wheel rendering and
 lifecycle, keybind action (tap/toggle/hold), profile-switch action, command action with placeholders, action chains,
 submenu-as-action-type with per-menu layout and colours, submenus that open inline as rings around their parent,
-entry reordering, the full editor, `/radialmenu`, and the Lua script action with menus it builds at run time.
+entry reordering, the full editor, `/radialmenu`, and the Lua script action with menus it builds at run time,
+branches included.
 
 The wheel's look is settled: six colours down the config → profile → menu chain, an accent that fills them in, a
 linear sector gap, a one-pixel soft edge, an outline the highlighted sector gets to itself, an optional wash behind

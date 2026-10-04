@@ -64,6 +64,8 @@ public final class ScriptSnippets {
             new Snippet("menu.open", "menu.open({" + CARET + "})"),
             new Snippet("menu.open opts", "menu.open(items, {title = \"" + CARET + "\", slots = 8})"),
             new Snippet("menu entry", "{key = \"" + CARET + "\", label = \"\", icon = \"minecraft:stone\"}"),
+            new Snippet("menu submenu", "{label = \"" + CARET + "\", opening = \"inline\", items = {}}"),
+            new Snippet("menu.open inline", "menu.open(" + CARET + ", {opening = \"inline\"})"),
             new Snippet("onPick", "onPick = function(key, item)\n  " + CARET + "\nend"),
             new Snippet("menu.update", "menu.update(items)"),
             new Snippet("menu.close", "menu.close()"),
