@@ -119,4 +119,98 @@ public class ProfileStorageTest {
     public void loadingSomethingThatIsNotThereReturnsNothing() {
         assertEquals(null, ProfileStorage.loadProfile("missing"));
     }
+
+    @Test
+    public void eachSaveKeepsTheVersionItWroteOver() {
+        saveTitled("alpha", "first");
+        saveTitled("alpha", "second");
+        saveTitled("alpha", "third");
+
+        // The live file is the newest, and the backups count backwards from it.
+        assertEquals("third", ProfileStorage.loadProfile("alpha").root.title);
+        assertEquals("second", backupTitle("alpha", 1));
+        assertEquals("first", backupTitle("alpha", 2));
+    }
+
+    @Test
+    public void onlyThreeVersionsAreKept() {
+        for (int i = 1; i <= 6; i++) {
+            saveTitled("alpha", "v" + i);
+        }
+
+        assertEquals("v5", backupTitle("alpha", 1));
+        assertEquals("v4", backupTitle("alpha", 2));
+        assertEquals("v3", backupTitle("alpha", 3));
+        assertFalse(backup("alpha", 4).isFile());
+    }
+
+    @Test
+    public void savingTheSameThingAgainDoesNotSpendTheHistory() {
+        saveTitled("alpha", "first");
+        saveTitled("alpha", "second");
+        // An editor saves whenever it closes; three of those must not push the one real previous version out.
+        saveTitled("alpha", "second");
+        saveTitled("alpha", "second");
+        saveTitled("alpha", "second");
+
+        assertEquals("first", backupTitle("alpha", 1));
+        assertFalse(backup("alpha", 2).isFile());
+    }
+
+    @Test
+    public void thereIsNothingToKeepUntilSomethingIsOverwritten() {
+        saveTitled("alpha", "first");
+
+        assertFalse(backup("alpha", 1).isFile());
+    }
+
+    @Test
+    public void theHistoryFollowsARename() {
+        saveTitled("alpha", "first");
+        saveTitled("alpha", "second");
+
+        assertTrue(ProfileStorage.renameFile("alpha", "omega"));
+
+        assertEquals("first", backupTitle("omega", 1));
+        assertFalse(backup("alpha", 1).isFile());
+    }
+
+    @Test
+    public void aDeletedProfileLeavesItsHistoryBehind() {
+        // The case the backups exist for: deleted by mistake is exactly when they must still be there.
+        saveTitled("alpha", "first");
+        saveTitled("alpha", "second");
+
+        assertTrue(ProfileStorage.deleteProfile("alpha"));
+
+        assertEquals("first", backupTitle("alpha", 1));
+    }
+
+    private static void saveTitled(String name, String title) {
+        Profile profile = Profile.empty(name);
+        profile.root.title = title;
+        ProfileStorage.saveProfile(profile);
+    }
+
+    private static File backup(String name, int age) {
+        return new File(ProfileStorage.backupsDir(), name + "." + age + ".json");
+    }
+
+    /** Reads a backup the same way the mod reads a profile, so the test checks a file that still loads. */
+    private String backupTitle(String name, int age) {
+        File file = backup(name, age);
+        assertTrue("no backup " + file.getName(), file.isFile());
+        try {
+            java.io.Reader reader = new java.io.InputStreamReader(
+                new java.io.FileInputStream(file),
+                java.nio.charset.Charset.forName("UTF-8"));
+            try {
+                return com.navatusein.radialmenu.core.json.ConfigCodec.readProfile(reader).root.title;
+            } finally {
+                reader.close();
+            }
+        } catch (Exception failure) {
+            throw new AssertionError(failure);
+        }
+    }
 }
