@@ -103,4 +103,24 @@ public class MenuNodeTest {
         assertEquals("child", root.childAt(0).title);
         assertNull(root.childAt(0).action.getString("binding", null));
     }
+
+    @Test
+    public void countingDeeplyLooksPastTheFirstWheel() {
+        MenuNode root = MenuNode.category("root", null, SlotLayout.dynamic());
+        MenuNode sub = MenuNode.category("sub", null, SlotLayout.dynamic());
+        sub.children.add(MenuNode.leaf("a", null, null));
+        sub.children.add(MenuNode.leaf("b", null, null));
+        root.children.add(sub);
+        root.children.add(MenuNode.leaf("c", null, null));
+        root.children.add(null);
+
+        // One wheel has two things on it; the profile has four entries in it.
+        assertEquals(2, root.filledCount());
+        assertEquals(4, root.deepCount());
+
+        // Emptying the submenu is invisible to the wheel above it, and that is the difference worth having.
+        sub.children.clear();
+        assertEquals(2, root.filledCount());
+        assertEquals(2, root.deepCount());
+    }
 }

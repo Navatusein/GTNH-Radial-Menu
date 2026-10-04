@@ -92,6 +92,26 @@ public class MenuNode {
     }
 
     /**
+     * Every entry anywhere under this node: its own, those of its submenus, and so on down.
+     *
+     * <p>
+     * What {@link #filledCount()} counts is one wheel; this counts a profile. The difference is the whole point of
+     * having both - a submenu that loses everything inside it leaves the wheel above it exactly as long as it was,
+     * so a number that only looked at one level could not tell the two apart.
+     */
+    public int deepCount() {
+        int count = 0;
+        for (MenuNode child : childrenOrEmpty()) {
+            if (child == null) {
+                continue;
+            }
+            count++;
+            count += child.deepCount();
+        }
+        return count;
+    }
+
+    /**
      * Entry drawn in a sector, or null when that sector is empty.
      *
      * <p>
