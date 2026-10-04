@@ -228,6 +228,19 @@ arithmetic. Put anything positional in `Ui`, never in a screen.
 minus title, icon and keep-open — those belong to the entry that owns the chain, not to an action. A submenu is
 offered on a slot and not as a step, because it has no executor: it is a shape, not something to run.
 
+**An inline submenu has no middle, so its entries are reached from its slot.** The dead zone belongs to the menu on
+screen, and an inline submenu unfolds *around* its entry rather than replacing that menu - so there is no centre to
+shift-click and no way to drill in. The slot editor carries the way in instead, which is where a player already goes
+to configure a submenu. It saves the slot first and then opens the list: both screens edit the same node - one its
+shape and colours, the other its entries - and leaving both open would mean whichever was saved last quietly undid
+the other. That is what `write()` is for, split out of `save()`: everything that decides what the slot is, without
+deciding whether the editor closes.
+
+**The move picker draws its tree with rectangles, not with box-drawing characters.** Those glyphs are not in
+Minecraft's font, and the ones that are have whatever width the font gives them, so a column of them lines up only by
+luck. Three rectangles a row always line up. The menu being left is drawn greyed rather than left out: a missing row
+puts a hole in the tree exactly where the player is standing.
+
 **The menu settings screen writes nothing until it is saved, moves included.** Its entry list is a working copy, so
 reordering, duplicating and removing are all undone by Cancel. A move to another menu is the one that could break
 that rule, because its other half lives on a node this screen does not own: writing the entry into its new menu on
