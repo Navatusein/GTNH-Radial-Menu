@@ -284,6 +284,9 @@ local key, item = menu.open(items, { title = "Homes" })
 
 An empty `items` returns `nil` immediately rather than opening an empty wheel.
 
+A choice can come from a submenu as well, in which case the key and the item are that nested entry's — see
+[Submenus](#submenus).
+
 ### `menu.close()` / `menu.update(items)`
 
 Only meaningful for a menu opened with `keepOpen` — see below. `close` shuts it, `update` replaces its contents in
@@ -322,6 +325,7 @@ An item is a table. A plain string is shorthand for `{ key = s, label = s }`.
 | `icon` | A string or a table — see below. Omit for no icon. |
 | `color` | `#RRGGBB` tint, for `sprite` and `file` icons only. |
 | `onPick` | Optional function, called when this item is chosen. |
+| `items` | A list of its own, which makes this entry a **submenu** rather than something to pick — see below. |
 
 Anything else you put in the table is yours and comes back untouched in the second return value: a command to send, a
 coordinate, a nested list.
@@ -354,6 +358,73 @@ The table form spells the same thing out and is the one to use when a name is bu
 
 An icon that does not resolve draws nothing; it is not an error. If you are unsure a sprite name exists, use an item
 icon — a slot with no icon is harder to recognise than one showing the wrong block.
+
+## Submenus
+
+An entry carrying an `items` list of its own is a submenu: pointing at it opens its entries instead of picking it. The
+wheel draws it exactly as it draws a submenu configured in a profile, which means `opening` decides how it arrives —
+`"replace"` (the default) drills in and the parent comes back on a right-click, `"inline"` unfolds it as a ring around
+the entry while the parent stays on screen.
+
+```lua
+local pick = menu.open({
+  { key = "home", label = "Home", icon = "minecraft:bed" },
+  { label = "Warps", icon = "minecraft:compass", opening = "inline",
+    items = {
+      { key = "spawn", label = "Spawn" },
+      { key = "mine",  label = "Mine"  },
+    } },
+  { key = "tp", label = "Accept tp", icon = "minecraft:ender_pearl" },
+})
+```
+
+`pick` is whatever the player ended on, at whatever depth — `"spawn"` here is a perfectly ordinary answer, and so is its
+`onPick`. A submenu entry is never itself the answer: its own `key` is never returned and its own `onPick` is never
+called, because choosing it is how its entries are reached.
+
+Besides `items`, a submenu entry may carry `opening`, `slots` and the colour options below (`accent`, `ring`,
+`highlight`, `border`, `highlightBorder`, `background`) — the same options `menu.open` takes for a wheel, because that
+is what it is. `title` is not among them: the entry's `label` is its name. Neither is the `icon` colour option, since
+on an entry `icon` is already the entry's own picture; a submenu's icon tint inherits.
+
+A list nested this way has to be built **before** the wheel opens, because the player reaches it by pointing rather
+than by choosing: there is no moment in between for the script to go and ask the server. For a list that is not known
+until then, use the next section.
+
+### Opening one menu inside another
+
+`menu.open` itself takes `opening = "inline"`, and then the menu does not replace the wheel: it unfolds as a ring
+around the entry the player just chose. That is the dynamic half of the same picture — the list may come from anything
+the script did in between, chat included.
+
+It needs the wheel to still be on screen, so the entry it hangs off has to be one the wheel stayed up for: open the
+parent menu with `keepOpen = true`.
+
+```lua
+local pick = menu.open({
+  { key = "home",  label = "Home" },
+  { key = "warps", label = "Warps", icon = "minecraft:compass",
+    onPick = function()
+      chat.send("/warp list")
+      local line = chat.await("^Warps: (.+)$")
+      if not line then return end
+
+      local warps = {}
+      for w in line:gmatch("[^,%s]+") do warps[#warps + 1] = w end
+
+      -- A ring around the "Warps" entry, with the wheel it came from still there behind it.
+      local w = menu.open(warps, { opening = "inline" })
+      if w then chat.send("/warp " .. w) end
+    end },
+}, { keepOpen = true })
+```
+
+Folding that ring away — a right-click on it, or on the entry it came from — is a cancellation like any other, and
+`menu.open` returns `nil`. Escape closes the whole wheel, which is also a cancellation.
+
+Where it cannot unfold — no wheel left on screen, or `scrollToSelect` on in the mod config, which has one ring and one
+index and no way to cross into another — the menu opens as a wheel of its own instead. A worse menu than the one asked
+for, but a working one. `title` is ignored for an inline menu: the entry it unfolds from is its name.
 
 ### `onPick`
 
@@ -407,6 +478,7 @@ menu.open(items, {
 | `accent` | One hue, expanded into all six colours below. |
 | `ring`, `highlight`, `border`, `highlightBorder`, `background`, `icon` | Individual colours, with the same meanings as a profile's `style`. |
 | `keepOpen` | `true` leaves the wheel up after a choice. |
+| `opening` | `"inline"` unfolds this menu as a ring around the entry just chosen instead of replacing the wheel — see [Opening one menu inside another](#opening-one-menu-inside-another). `"replace"` is the default. |
 
 `slots` is a **minimum**: eight sectors with three items keeps the ring's shape, which is the point of a fixed wheel,
 and eleven items stretch it to eleven rather than losing three. More than 24 items are cut, with a warning — page them
@@ -451,7 +523,8 @@ starts fresh every time, with no state kept between activations.
 |---|---|
 | The server never answers | `chat.await` returns `nil` at its timeout. Check for it — a `nil` reaching `gmatch` is an error. |
 | The wording differs from the pattern | The same as no answer. Report it with `notify` rather than failing silently. |
-| The player cancels the menu | `menu.open` returns `nil`. |
+| The player cancels the menu | `menu.open` returns `nil`. Escape closes the whole wheel; folding an inline ring away cancels just the menu it was showing. |
+| An inline menu has nothing to unfold from | It opens as a wheel of its own instead, and is answered the same way. |
 | Parsing yields nothing | `menu.open` with an empty list returns `nil` without opening a wheel. |
 | The script outlives `timeoutTicks` | Cancelled, with a line in the log, and any menu it owns is closed. |
 | The entry is triggered again mid-run | The previous run is cancelled and the new one starts. |
