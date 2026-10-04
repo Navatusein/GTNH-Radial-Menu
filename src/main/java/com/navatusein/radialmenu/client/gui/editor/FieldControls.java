@@ -50,6 +50,25 @@ final class FieldControls {
     }
 
     /**
+     * Whether a field is worth showing at all, given what the rest of the action says.
+     *
+     * <p>
+     * A slot count means nothing on a dynamic wheel - that layout takes its sector count from how many entries
+     * there are - so the row is left out rather than greyed. Greying says "you could set this"; leaving it out says
+     * the truth, which is that this layout has no such number.
+     *
+     * <p>
+     * The value is not cleared when the row goes: a player who switches to dynamic and back should find the count
+     * they chose, not the default.
+     */
+    static boolean isRelevant(ActionField field, ActionSpec spec) {
+        if (!ActionTypes.PARAM_SLOT_COUNT.equals(field.key) || spec == null) {
+            return true;
+        }
+        return !"dynamic".equalsIgnoreCase(spec.getString(ActionTypes.PARAM_SLOT_MODE, ""));
+    }
+
+    /**
      * Whether the field stands apart from its neighbours.
      *
      * <p>

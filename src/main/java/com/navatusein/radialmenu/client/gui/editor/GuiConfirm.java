@@ -6,7 +6,7 @@ import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
 
-/** Confirmation for the one action that destroys a file. */
+/** Confirmation for the things that destroy something there is no getting back. */
 public class GuiConfirm extends UiScreen {
 
     public interface Result {
@@ -16,11 +16,21 @@ public class GuiConfirm extends UiScreen {
 
     private final String questionKey;
     private final String subject;
+    private final String confirmKey;
     private final Result result;
 
     public GuiConfirm(String questionKey, String subject, Result result) {
+        this(questionKey, subject, "radialmenu.profiles.delete", result);
+    }
+
+    /**
+     * @param confirmKey what the confirming button says, because "Delete" is wrong for everything that destroys
+     *                   something without deleting a file
+     */
+    public GuiConfirm(String questionKey, String subject, String confirmKey, Result result) {
         this.questionKey = questionKey;
         this.subject = subject;
+        this.confirmKey = confirmKey;
         this.result = result;
     }
 
@@ -43,7 +53,7 @@ public class GuiConfirm extends UiScreen {
     protected void buildControls() {
         setContentHeight(Ui.STEP);
         // Cancel first: the destructive choice should not be the one under the cursor by default.
-        addBottomBar("gui.cancel", null, "radialmenu.profiles.delete");
+        addBottomBar("gui.cancel", null, confirmKey);
     }
 
     @Override

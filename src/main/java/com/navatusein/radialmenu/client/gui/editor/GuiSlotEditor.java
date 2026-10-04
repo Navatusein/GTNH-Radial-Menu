@@ -168,7 +168,10 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
         // The way into a submenu's own entry list. It is here rather than only in the middle of the wheel because
         // an inline submenu has no middle of its own: it unfolds around its entry, so the entry is the only thing
         // there is to point at. A replacing submenu can still be opened and configured from its own dead zone.
-        if (draft.isCategory()) {
+        //
+        // Only while the submenu tab is the one on screen. It is already a category that is being looked at as a
+        // script, and offering a way into entries that saving is about to discard is offering a trapdoor.
+        if (draft.isCategory() && ActionTypes.SUBMENU.equals(selectedType)) {
             y += Ui.GAP;
             this.buttonList.add(
                 new GuiButton(
@@ -225,8 +228,33 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
     }
 
     private void save() {
-        write();
-        GuiStack.closeAll();
+        if (!dropsEntries()) {
+            write();
+            GuiStack.closeAll();
+            return;
+        }
+        // The same loss, reached deliberately this time: the player has switched the type away from submenu and is
+        // saving. The tab says so, but a subtree going quietly is worth one question - there is no undo and no
+        // older copy of the profile to go back to.
+        captureInputs();
+        GuiStack.push(
+            new GuiConfirm(
+                "radialmenu.editor.confirmDiscard",
+                I18n.format("radialmenu.editor.confirmDiscard.subject", Integer.valueOf(draft.filledCount())),
+                "radialmenu.editor.discard",
+                new GuiConfirm.Result() {
+
+                    @Override
+                    public void onConfirmed() {
+                        write();
+                        GuiStack.closeAll();
+                    }
+                }));
+    }
+
+    /** Whether saving would turn a submenu that still holds entries into something that cannot hold any. */
+    private boolean dropsEntries() {
+        return draft.isCategory() && draft.filledCount() > 0 && !ActionTypes.SUBMENU.equals(selectedType);
     }
 
     /**
@@ -264,6 +292,12 @@ public class GuiSlotEditor extends GuiActionEditor implements GuiIconPicker.Call
      * time, and the tooltip says so.
      */
     private void openEntries() {
+        // Guarded rather than trusted to the button that calls it. write() is a save, and a save of a slot whose
+        // chosen type is not a submenu is what *clears* the children - so reaching here from any other tab would
+        // destroy the very list it was asked to open. That is precisely what it did once.
+        if (!ActionTypes.SUBMENU.equals(selectedType)) {
+            return;
+        }
         MenuNode node = write();
         if (node == null || !node.isCategory()) {
             return;

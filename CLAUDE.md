@@ -514,6 +514,14 @@ Menus live in `<game folder>/RadialMenu/`, not `config/` — one file per profil
 one. It is written from the reader, not from intent, so keep it in step with `core/model/` and `core/action/` —
 notably the action types' parameter names and which of them are required.
 
+**A temporary file protects a save that stops; the backups protect one that finishes.** The rename-through-a-temp
+dance only guards against a half-written file, and the loss worth guarding against is an editor that wrote exactly
+what it was told to - a slot saved as the wrong type, a submenu converted, a subtree gone. `saveProfile` therefore
+keeps the previous three versions under `RadialMenu/backups` as ordinary `.json` files, copied rather than renamed so
+the live file stays put until the new one is written. A save whose bytes are unchanged writes nothing at all: an
+editor saves every time it closes, and those would otherwise push the one real previous version out of the window.
+A failed backup is logged and ignored - insurance that refused the save it was protecting would be worse than none.
+
 Renaming a profile to a different capitalisation is a rename of the same file on Windows, not a collision — check
 `ProfileStorage.isSameFile` before refusing, and rename through a temporary name. Writing the new file and deleting
 the old one would delete the file just written.

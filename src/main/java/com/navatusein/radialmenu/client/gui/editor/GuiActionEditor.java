@@ -145,6 +145,11 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
 
         for (int i = 0; i < selected.fields.size(); i++) {
             ActionField field = selected.fields.get(i);
+            // A field that has nothing to say about this action is not built at all, so it takes no row, no
+            // position in the parallel lists, and no space in the panel's height.
+            if (!FieldControls.isRelevant(field, spec)) {
+                continue;
+            }
             ActionField next = i + 1 < selected.fields.size() ? selected.fields.get(i + 1) : null;
             if (FieldControls.standsApart(field)) {
                 y += Ui.GAP;
@@ -640,8 +645,14 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
                 spec.set(key, Boolean.toString(((UiCheckbox) button).checked));
                 return;
             case ENUM:
+                // Read back and rebuilt rather than merely relabelled: changing an enum can take another field off
+                // the screen - a dynamic layout has no slot count - and a stale row would stay until something
+                // else happened to rebuild. Captured first, because rebuilding discards anything typed but not yet
+                // read back.
+                captureInputs();
                 spec.set(key, next(field.options, current));
-                break;
+                requestRebuild();
+                return;
             case PROFILE_REF:
                 spec.set(key, next(FieldControls.profileOptions(), current));
                 break;
