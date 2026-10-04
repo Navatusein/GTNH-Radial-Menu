@@ -166,6 +166,9 @@ public class GuiMenuSettings extends UiScreen {
         ActionType type = ActionTypes.get(ActionTypes.SUBMENU);
         for (int fieldIndex = 0; fieldIndex < type.fields.size(); fieldIndex++) {
             ActionField field = type.fields.get(fieldIndex);
+            if (!FieldControls.isRelevant(field, draft)) {
+                continue;
+            }
             ActionField nextField = fieldIndex + 1 < type.fields.size() ? type.fields.get(fieldIndex + 1) : null;
             int index = fields.size();
             fields.add(field);

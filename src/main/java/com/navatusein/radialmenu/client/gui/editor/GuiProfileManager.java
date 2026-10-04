@@ -33,6 +33,7 @@ public class GuiProfileManager extends UiScreen {
     private static final int ID_RENAME = 4;
     private static final int ID_DUPLICATE = 5;
     private static final int ID_DELETE = 6;
+    private static final int ID_BACKUPS = 8;
 
     private static final int BUTTON_COLUMN = 104;
 
@@ -91,6 +92,7 @@ public class GuiProfileManager extends UiScreen {
         y = addAction(ID_NEW, "radialmenu.profiles.new", x, y, true);
         y = addAction(ID_RENAME, "radialmenu.profiles.rename", x, y, has);
         y = addAction(ID_DUPLICATE, "radialmenu.profiles.duplicate", x, y, has);
+        y = addAction(ID_BACKUPS, "radialmenu.profiles.backups", x, y, has);
         y += Ui.GAP;
         addAction(ID_DELETE, "radialmenu.profiles.delete", x, y, has);
 
@@ -177,6 +179,10 @@ public class GuiProfileManager extends UiScreen {
                             return null;
                         }
                     }));
+                return;
+
+            case ID_BACKUPS:
+                GuiStack.push(new GuiProfileBackups(selected));
                 return;
 
             case ID_DELETE:
