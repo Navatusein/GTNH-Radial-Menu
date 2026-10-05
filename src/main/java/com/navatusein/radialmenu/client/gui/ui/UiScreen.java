@@ -481,6 +481,21 @@ public abstract class UiScreen extends GuiScreen {
         super.mouseClicked(mouseX, mouseY, mouseButton);
     }
 
+    /**
+     * Whether this screen is still the one on show - false once a button pressed by this very click opened another.
+     *
+     * <p>
+     * {@code actionPerformed} runs inside {@code super.mouseClicked}, so a screen that goes on to hand the click to
+     * its text fields does it after the next screen has been built and has focused a field of its own. The click
+     * lands outside ours, which lose focus - and lwjgl3ify counts focus changes to decide whether the OS is sending
+     * text at all: the count is reset when a screen opens, raised by the new field, and lowered again by a field of a
+     * screen nobody is looking at. The new field then draws its cursor and receives nothing until it is clicked away
+     * from and back. Every screen with a field asks this before touching one.
+     */
+    protected boolean isShowing() {
+        return this.mc.currentScreen == this;
+    }
+
     private void drawScrollbar() {
         int max = maxScroll();
         if (max <= 0) {

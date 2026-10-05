@@ -816,7 +816,7 @@ public abstract class GuiActionEditor extends UiScreen implements GuiKeyBindPick
         }
         super.mouseClicked(mouseX, mouseY, button);
         // A field clipped at the panel edge still answers to clicks on the part that was cut away.
-        if (!isInsideViewport(mouseY)) {
+        if (!isShowing() || !isInsideViewport(mouseY)) {
             return;
         }
         for (GuiTextField input : fieldInputs) {
