@@ -107,6 +107,9 @@ public class GuiTextPrompt extends UiScreen {
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int button) {
         super.mouseClicked(mouseX, mouseY, button);
+        if (!isShowing()) {
+            return;
+        }
         input.mouseClicked(mouseX, mouseY, button);
     }
 
