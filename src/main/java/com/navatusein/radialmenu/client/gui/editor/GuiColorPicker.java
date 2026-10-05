@@ -338,6 +338,9 @@ public class GuiColorPicker extends UiScreen {
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) {
         super.mouseClicked(mouseX, mouseY, mouseButton);
+        if (!isShowing()) {
+            return;
+        }
         hexField.mouseClicked(mouseX, mouseY, mouseButton);
 
         if (mouseButton != 0) {

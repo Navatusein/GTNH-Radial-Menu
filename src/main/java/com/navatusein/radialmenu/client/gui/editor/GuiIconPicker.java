@@ -627,6 +627,9 @@ public class GuiIconPicker extends UiScreen {
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) {
         super.mouseClicked(mouseX, mouseY, mouseButton);
+        if (!isShowing()) {
+            return;
+        }
         searchField.mouseClicked(mouseX, mouseY, mouseButton);
 
         if (mouseButton != 0) {
