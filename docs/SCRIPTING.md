@@ -576,6 +576,11 @@ The table form spells the same thing out, for a name built at run time — `kind
 
 An icon that does not resolve draws nothing; it is not an error.
 
+None of these names need typing. The script editor's **Insert icon** button opens the same picker a slot uses and writes
+the result in at the caret — over the string the caret is in, if it is in one, so changing an icon is a click inside
+its quotes and a pick. A tinted sprite or PNG is written in the table form, since a string has nowhere to put the
+colour.
+
 #### Menu options
 
 ```lua
