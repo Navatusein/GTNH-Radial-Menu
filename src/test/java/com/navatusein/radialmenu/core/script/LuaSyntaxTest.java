@@ -70,12 +70,62 @@ public class LuaSyntaxTest {
 
     @Test
     public void readsAMemberOnlyAfterADot() {
-        // The point of the whole exercise: chat.send is coloured twice over and a misspelling is not.
-        assertEquals(Kind.API, find("chat.send('x')", "send").kind);
+        // The point of the whole exercise: chat.send is coloured twice over and a misspelling is not - not even with
+        // a bracket after it, which on any other name would be enough.
+        assertEquals(Kind.FUNCTION, find("chat.send('x')", "send").kind);
         assertEquals(Kind.PLAIN, find("chat.sned('x')", "sned").kind);
         // "name" is a member of player, and a bare local called name is not one.
-        assertEquals(Kind.API, find("player.name", "name").kind);
+        assertEquals(Kind.FIELD, find("player.name", "name").kind);
         assertEquals(Kind.PLAIN, find("local name = 1", "name").kind);
+    }
+
+    @Test
+    public void aTableAndWhatIsCalledOnItAreDifferentColours() {
+        assertEquals(Kind.API, find("chat.send('x')", "chat").kind);
+        assertEquals(Kind.FUNCTION, find("chat.send('x')", "send").kind);
+        // A space before the bracket is still a call.
+        assertEquals(Kind.FUNCTION, find("chat.send ('x')", "send").kind);
+    }
+
+    @Test
+    public void anythingWithABracketAfterItIsAFunction() {
+        assertEquals(Kind.FUNCTION, find("notify('done')", "notify").kind);
+        assertEquals(Kind.FUNCTION, find("local function pickHome(list)", "pickHome").kind);
+        assertEquals(Kind.FUNCTION, find("pickHome(list)", "pickHome").kind);
+        assertEquals(Kind.FUNCTION, find("list:gmatch('%a+')", "gmatch").kind);
+        assertEquals(Kind.PLAIN, find("list:gmatch('%a+')", "list").kind);
+        // A keyword is a keyword whatever follows it.
+        assertEquals(Kind.KEYWORD, find("if (ready) then", "if").kind);
+        assertEquals(Kind.KEYWORD, find("x = function(a) end", "function").kind);
+    }
+
+    @Test
+    public void luasOwnLibrariesAreNotHeldToTheModsMemberList() {
+        assertEquals(Kind.API, find("string.format('%d', 1)", "string").kind);
+        assertEquals(Kind.FUNCTION, find("string.format('%d', 1)", "format").kind);
+        assertEquals(Kind.FUNCTION, find("table.insert(homes, home)", "insert").kind);
+        assertEquals(Kind.PLAIN, find("x = math.pi", "pi").kind);
+    }
+
+    @Test
+    public void aKnownMemberOfAnyValueIsAField() {
+        assertEquals(Kind.FIELD, find("picture = stack.icon", "icon").kind);
+        assertEquals(Kind.FIELD, find("player.held.name", "name").kind);
+        assertEquals(Kind.PLAIN, find("home.distance", "distance").kind);
+        assertEquals(Kind.FUNCTION, find("home.distance()", "distance").kind);
+    }
+
+    @Test
+    public void wordsThatStandForAValueAreNotKeywords() {
+        assertEquals(Kind.CONSTANT, find("return nil", "nil").kind);
+        assertEquals(Kind.KEYWORD, find("return nil", "return").kind);
+        assertEquals(Kind.CONSTANT, find("ok = true", "true").kind);
+        assertEquals(Kind.CONSTANT, find("ok = false", "false").kind);
+        assertEquals(Kind.SELF, find("self.count = 1", "self").kind);
+        assertEquals(Kind.DECLARATION, find("local ok = true", "local").kind);
+        assertEquals(Kind.KEYWORD, find("local function go() end", "function").kind);
+        // Inside a longer name they are just letters.
+        assertEquals(Kind.PLAIN, find("nilCount = 1", "nilCount").kind);
     }
 
     @Test
@@ -112,7 +162,7 @@ public class LuaSyntaxTest {
                     lines.get(0)
                         .size() - 1).kind);
         assertEquals(
-            Kind.KEYWORD,
+            Kind.DECLARATION,
             lines.get(1)
                 .get(0).kind);
     }
@@ -140,7 +190,7 @@ public class LuaSyntaxTest {
         // And the code after the closing bracket is code again.
         List<Token> third = lines.get(2);
         assertEquals(Kind.COMMENT, third.get(0).kind);
-        assertTrue(hasKind(third, Kind.KEYWORD));
+        assertTrue(hasKind(third, Kind.DECLARATION));
     }
 
     @Test
@@ -149,7 +199,7 @@ public class LuaSyntaxTest {
         for (Token token : lines.get(1)) {
             assertEquals("a ]] does not close a [==[", Kind.STRING, token.kind);
         }
-        assertTrue(hasKind(lines.get(2), Kind.KEYWORD));
+        assertTrue(hasKind(lines.get(2), Kind.DECLARATION));
     }
 
     @Test

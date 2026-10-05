@@ -50,15 +50,22 @@ public final class Ui {
     public static final int ROW_SELECTED = 0x50FFFFFF;
 
     /** Code editor: one colour per kind of token, plus the marks drawn behind the text. */
-    public static final int CODE_PLAIN = 0xFFE0E0E0;
-    public static final int CODE_KEYWORD = 0xFFD98BD9;
-    public static final int CODE_API = 0xFF5FD7D7;
-    public static final int CODE_STRING = 0xFF9ACD68;
-    public static final int CODE_NUMBER = 0xFFE0A355;
-    public static final int CODE_COMMENT = 0xFF7A7A7A;
-    public static final int CODE_OPERATOR = 0xFFB4B4B4;
+    public static final int CODE_PLAIN = 0xFFC9D1D9;
+    public static final int CODE_KEYWORD = 0xFFC586C0;
+    public static final int CODE_DECLARATION = 0xFFFF7B72;
+    public static final int CODE_CONSTANT = 0xFF569CD6;
+    public static final int CODE_SELF = 0xFF79C0FF;
+    public static final int CODE_API = 0xFFFFA657;
+    public static final int CODE_FUNCTION = 0xFFD2A8FF;
+    public static final int CODE_FIELD = 0xFF4EC9B0;
+    public static final int CODE_STRING = 0xFFA5D6FF;
+    public static final int CODE_NUMBER = 0xFFB5CEA8;
+    public static final int CODE_COMMENT = 0xFF8B949E;
+    public static final int CODE_OPERATOR = 0xFFD4D4D4;
     public static final int CODE_GUTTER = 0xFF6A6A6A;
     public static final int CODE_CURRENT_LINE = 0x18FFFFFF;
+    public static final int CODE_INDENT_GUIDE = 0x38FFFFFF;
+    public static final int CODE_FOLDED = 0x20FFFFFF;
     public static final int CODE_SELECTION = 0x604A90D9;
     public static final int CODE_ERROR_LINE = 0x40FF5555;
 

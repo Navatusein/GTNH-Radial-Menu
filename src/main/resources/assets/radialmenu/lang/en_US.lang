@@ -214,6 +214,8 @@ radialmenu.script.position=Ln %d, Col %d - %d lines
 radialmenu.script.snippets.show=Show API
 radialmenu.script.snippets.hide=Hide API
 radialmenu.script.snippets.tip=Click an entry to write it into the script where the caret is.
+radialmenu.script.icon=Insert icon
+radialmenu.script.icon.tip=Pick an icon and write its name into the script. With the caret inside a quoted string, that string is replaced.
 
 radialmenu.action.keybind.shift=Hold Shift
 radialmenu.action.keybind.ctrl=Hold Ctrl
