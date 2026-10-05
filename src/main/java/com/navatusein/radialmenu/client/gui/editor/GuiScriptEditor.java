@@ -1,6 +1,7 @@
 package com.navatusein.radialmenu.client.gui.editor;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import net.minecraft.client.gui.Gui;
@@ -14,8 +15,12 @@ import org.lwjgl.input.Mouse;
 import com.navatusein.radialmenu.client.gui.GuiStack;
 import com.navatusein.radialmenu.client.gui.ui.Ui;
 import com.navatusein.radialmenu.client.gui.ui.UiScreen;
+import com.navatusein.radialmenu.core.model.IconSpec;
 import com.navatusein.radialmenu.core.script.LuaSyntax;
+import com.navatusein.radialmenu.core.script.ScriptIcons;
 import com.navatusein.radialmenu.core.script.ScriptSnippets;
+import com.navatusein.radialmenu.core.text.Folds;
+import com.navatusein.radialmenu.core.text.IndentGuides;
 import com.navatusein.radialmenu.core.text.TextBuffer;
 
 /**
@@ -47,7 +52,7 @@ import com.navatusein.radialmenu.core.text.TextBuffer;
  * <b>Scrolling is by whole lines.</b> A text row is a line, so there is nothing to gain from stopping between two of
  * them - and the caret arithmetic stays in whole rows, which is the half of this that is easy to get wrong.
  */
-public class GuiScriptEditor extends UiScreen {
+public class GuiScriptEditor extends UiScreen implements GuiIconPicker.Callback {
 
     public interface Result {
 
@@ -58,10 +63,23 @@ public class GuiScriptEditor extends UiScreen {
     private static final int LINE_HEIGHT = 11;
 
     private static final int TEXT_PAD = 3;
+
+    /**
+     * Space between the edge of the line numbers and the text, wider than the padding on the other three sides.
+     *
+     * <p>
+     * The first indent rule stands exactly where the text starts. At three pixels from the gutter's edge the two read
+     * as one line drawn twice; at this distance they are two things.
+     */
+    private static final int TEXT_LEFT_PAD = 7;
     private static final int GUTTER_PAD = 4;
+
+    /** Width of the strip at the gutter's right edge that carries the fold marks. */
+    private static final int FOLD_WIDTH = 7;
     private static final int SCROLL_ROWS = 3;
 
     private static final int ID_SNIPPETS = 50;
+    private static final int ID_ICON = 51;
     private static final int SNIPPET_WIDTH = 96;
     private static final int SNIPPET_ROW = 10;
     private static final int SNIPPET_PAD = 3;
@@ -89,7 +107,27 @@ public class GuiScriptEditor extends UiScreen {
 
     private List<List<LuaSyntax.Token>> tokens;
 
-    private int topLine;
+    /** Leading spaces per line, blank lines filled in. Worked out with the tokens, since both change on an edit. */
+    private int[] indentDepths;
+
+    /** Which blocks are folded away. Lives with the screen: a script opens whole every time. */
+    private final Folds folds = new Folds();
+
+    /**
+     * The lines on show, in order - every line of the script, less the ones under a fold.
+     *
+     * <p>
+     * A row on screen is an index into this and no longer a line number, which is the one thing folding changes about
+     * the arithmetic: everything that scrolls or hit-tests counts rows, and only then asks which line a row is.
+     */
+    private int[] visible;
+
+    /** The span the next edit will replace - the selection, or the caret's line - and how long the script was. */
+    private int editFrom;
+    private int editTo;
+    private int linesBefore;
+
+    private int topRow;
     private int leftPixel;
     private int blinkTicks;
     private boolean dragging;
@@ -101,6 +139,7 @@ public class GuiScriptEditor extends UiScreen {
         this.errorText = errorText;
         this.errorLine = lineOf(errorText);
         retokenize();
+        rememberSpan();
     }
 
     /**
@@ -163,6 +202,18 @@ public class GuiScriptEditor extends UiScreen {
         this.buttonList.add(toggle);
         markFooter(ID_SNIPPETS);
         tooltip(ID_SNIPPETS, I18n.format("radialmenu.script.snippets.tip"));
+
+        // Opposite the API toggle and the same width, so the bar stays balanced around Done and Cancel.
+        this.buttonList.add(
+            new GuiButton(
+                ID_ICON,
+                panelLeft + Ui.PAD,
+                Ui.bottomBarY(this.height),
+                SNIPPET_WIDTH,
+                Ui.ROW,
+                I18n.format("radialmenu.script.icon")));
+        markFooter(ID_ICON);
+        tooltip(ID_ICON, I18n.format("radialmenu.script.icon.tip"));
     }
 
     @Override
@@ -181,7 +232,36 @@ public class GuiScriptEditor extends UiScreen {
             // The code area changes width, so what was in view may not be any more.
             afterMove();
             requestRebuild();
+            return;
         }
+        if (button.id == ID_ICON) {
+            GuiStack.push(new GuiIconPicker(this));
+        }
+    }
+
+    /**
+     * Writes the picked icon in as source, over the string the caret is in if it is in one.
+     *
+     * <p>
+     * The names are what nobody types from memory - a sprite out of a thousand, a potion's unlocalized name, the
+     * damage value of lime clay - and the picker already knows every one. A caret inside a quoted string is the
+     * player pointing at the icon to change, so the whole string goes, quotes included: the replacement brings its
+     * own, and may be a table rather than a string when it carries a tint. Anywhere else it is an insertion, and a
+     * selection is replaced the way typing would replace it.
+     */
+    @Override
+    public void onIconPicked(IconSpec icon) {
+        int line = buffer.caretLine();
+        if (!buffer.hasSelection()) {
+            LuaSyntax.Token string = ScriptIcons
+                .stringAt(line < tokens.size() ? tokens.get(line) : null, buffer.line(line), buffer.caretColumn());
+            if (string != null) {
+                buffer.moveTo(line, string.start, false);
+                buffer.moveTo(line, string.end, true);
+            }
+        }
+        buffer.insert(ScriptIcons.spell(icon));
+        afterEdit();
     }
 
     @Override
@@ -212,11 +292,18 @@ public class GuiScriptEditor extends UiScreen {
     }
 
     private int gutterWidth() {
-        return this.fontRendererObj.getStringWidth(String.valueOf(Math.max(99, buffer.lineCount()))) + 2 * GUTTER_PAD;
+        return this.fontRendererObj.getStringWidth(String.valueOf(Math.max(99, buffer.lineCount()))) + GUTTER_PAD
+            + 2
+            + FOLD_WIDTH;
+    }
+
+    /** The x of the rule between the line numbers and the text. */
+    private int gutterRight() {
+        return viewportLeft() + 1 + gutterWidth();
     }
 
     private int textLeft() {
-        return viewportLeft() + 1 + gutterWidth() + 1 + TEXT_PAD;
+        return viewportLeft() + 1 + gutterWidth() + 1 + TEXT_LEFT_PAD;
     }
 
     private int textRight() {
@@ -265,20 +352,113 @@ public class GuiScriptEditor extends UiScreen {
 
     private void retokenize() {
         tokens = LuaSyntax.tokenize(buffer.lines());
+        indentDepths = IndentGuides.depths(buffer.lines());
+        visible = folds.visibleLines(buffer.lines(), indentDepths);
+    }
+
+    /**
+     * Notes what the next edit would replace.
+     *
+     * <p>
+     * The buffer does not report what an edit did, and the folds need to know which lines it touched to follow the
+     * text. Every edit replaces the selection or happens on the caret's line, and every change to either goes through
+     * {@link #afterMove} - so the answer is simply whatever was true the last time the caret came to rest.
+     */
+    private void rememberSpan() {
+        if (buffer.hasSelection()) {
+            TextBuffer.Span span = buffer.selection();
+            editFrom = span.startLine;
+            editTo = span.endLine;
+        } else {
+            editFrom = buffer.caretLine();
+            editTo = buffer.caretLine();
+        }
+        linesBefore = buffer.lineCount();
     }
 
     private void afterEdit() {
-        retokenize();
+        tokens = LuaSyntax.tokenize(buffer.lines());
+        indentDepths = IndentGuides.depths(buffer.lines());
+        folds.edited(editFrom, editTo, buffer.lineCount() - linesBefore, buffer.lines(), indentDepths);
+        // Typing must never happen where it cannot be seen: an edit that left the caret under a fold opens it.
+        folds.reveal(buffer.lines(), indentDepths, buffer.caretLine());
+        visible = folds.visibleLines(buffer.lines(), indentDepths);
         afterMove();
+    }
+
+    /** The row a line is drawn on, counted from the top of the script. A hidden line answers with its fold's row. */
+    private int rowOf(int line) {
+        int found = Arrays.binarySearch(visible, line);
+        return found >= 0 ? found : Math.max(0, -found - 2);
+    }
+
+    /** The line drawn on a row, clamped to the script. */
+    private int lineAtRow(int row) {
+        return visible[Math.max(0, Math.min(visible.length - 1, row))];
+    }
+
+    /**
+     * Folds or opens the block a line starts. Returns false when the line starts none.
+     *
+     * <p>
+     * A caret left inside the block is put on the line that now stands for it - the alternative is a caret that is
+     * nowhere on screen and still takes what is typed.
+     */
+    private boolean toggleFold(int line) {
+        if (!folds.toggle(buffer.lines(), indentDepths, line)) {
+            return false;
+        }
+        visible = folds.visibleLines(buffer.lines(), indentDepths);
+        if (folds.hiddenUnder(buffer.lines(), indentDepths, buffer.caretLine()) >= 0) {
+            buffer.moveTo(
+                line,
+                buffer.line(line)
+                    .length(),
+                false);
+        }
+        afterMove();
+        return true;
+    }
+
+    /**
+     * Steps the caret out of a fold a key just moved it into.
+     *
+     * <p>
+     * The buffer knows nothing about folds, so an arrow key off the end of a folded line lands on the first line
+     * under it. Carrying on in the direction of travel - past the block going forward, onto its opening line going
+     * back - is what makes a fold one line as far as the keyboard is concerned.
+     *
+     * @param sideways whether the move was along the text, which arrives at an end of a line, or across lines, which
+     *                 keeps its column
+     */
+    private void leaveFold(boolean forward, boolean sideways, boolean select) {
+        int header = folds.hiddenUnder(buffer.lines(), indentDepths, buffer.caretLine());
+        if (header < 0) {
+            return;
+        }
+        int after = Folds.endOf(buffer.lines(), indentDepths, header) + 1;
+        if (forward && after < buffer.lineCount()) {
+            buffer.moveTo(after, sideways ? 0 : buffer.caretColumn(), select);
+            return;
+        }
+        // Backwards, or forwards with nothing after the block: the opening line, at its end unless a column was
+        // being kept.
+        boolean atEnd = sideways || forward;
+        buffer.moveTo(
+            header,
+            atEnd ? buffer.line(header)
+                .length() : buffer.caretColumn(),
+            select);
     }
 
     private void afterMove() {
         blinkTicks = 0;
         int rows = visibleRows();
-        if (buffer.caretLine() < topLine) {
-            topLine = buffer.caretLine();
-        } else if (buffer.caretLine() >= topLine + rows) {
-            topLine = buffer.caretLine() - rows + 1;
+        int caretRow = rowOf(buffer.caretLine());
+        if (caretRow < topRow) {
+            topRow = caretRow;
+        } else if (caretRow >= topRow + rows) {
+            topRow = caretRow - rows + 1;
         }
         clampScroll();
 
@@ -290,10 +470,11 @@ public class GuiScriptEditor extends UiScreen {
             leftPixel = caretX - width + 2;
         }
         leftPixel = Math.max(0, leftPixel);
+        rememberSpan();
     }
 
     private void clampScroll() {
-        topLine = Math.max(0, Math.min(topLine, Math.max(0, buffer.lineCount() - visibleRows())));
+        topRow = Math.max(0, Math.min(topRow, Math.max(0, visible.length - visibleRows())));
     }
 
     @Override
@@ -309,7 +490,7 @@ public class GuiScriptEditor extends UiScreen {
         Ui.list(left, top, right, bottom);
         clampScroll();
 
-        int gutterRight = left + 1 + gutterWidth();
+        int gutterRight = gutterRight();
         Gui.drawRect(left + 1, top + 1, gutterRight, bottom - 1, 0x30000000);
         Gui.drawRect(gutterRight, top + 1, gutterRight + 1, bottom - 1, 0x30FFFFFF);
 
@@ -319,10 +500,10 @@ public class GuiScriptEditor extends UiScreen {
         // Behind everything, and across the whole box including the gutter: a line marker that stopped at the text
         // would read as a selection rather than as "you are here".
         for (int row = 0; row < rows; row++) {
-            int line = topLine + row;
-            if (line >= buffer.lineCount()) {
+            if (topRow + row >= visible.length) {
                 break;
             }
+            int line = visible[topRow + row];
             int y = textTop + row * LINE_HEIGHT;
             if (line == errorLine) {
                 Gui.drawRect(left + 1, y - 1, right - 1, y + LINE_HEIGHT - 1, Ui.CODE_ERROR_LINE);
@@ -333,26 +514,97 @@ public class GuiScriptEditor extends UiScreen {
             String number = String.valueOf(line + 1);
             this.fontRendererObj.drawString(
                 number,
-                gutterRight - GUTTER_PAD - this.fontRendererObj.getStringWidth(number),
+                gutterRight - FOLD_WIDTH - 2 - this.fontRendererObj.getStringWidth(number),
                 y,
                 line == errorLine ? Ui.TEXT_ERROR : line == buffer.caretLine() ? Ui.TEXT_MUTED : Ui.CODE_GUTTER);
+            drawFoldMark(line, gutterRight, y);
         }
 
         // The text is the only thing that moves sideways, so it is the only thing clipped - the gutter has to stay
         // readable and the frame has to keep its edges.
         Ui.beginClip(gutterRight + 1, top + 1, right - 1, bottom - 1);
         for (int row = 0; row < rows; row++) {
-            int line = topLine + row;
-            if (line >= buffer.lineCount()) {
+            if (topRow + row >= visible.length) {
                 break;
             }
+            int line = visible[topRow + row];
+            drawIndentGuides(line, textTop + row * LINE_HEIGHT);
             drawSelection(line, textTop + row * LINE_HEIGHT);
             drawLine(line, textTop + row * LINE_HEIGHT);
+            if (folds.isFolded(line)) {
+                drawFoldedTail(line, textTop + row * LINE_HEIGHT);
+            }
         }
         drawCaret(textTop, rows);
         Ui.endClip();
 
         drawStatus(bottom + Ui.GAP);
+    }
+
+    /**
+     * The mark beside a line that opens a block: a minus while the block is on show, a plus once it is folded.
+     *
+     * <p>
+     * Drawn with rectangles for the reason the move picker's tree is - an arrow glyph is whatever the font makes of
+     * it, and at this size that is a smudge. Dim while open, so a script is not a column of marks down its side, and
+     * bright once folded, because that one is telling the player there is code they cannot see.
+     */
+    private void drawFoldMark(int line, int gutterRight, int y) {
+        boolean folded = folds.isFolded(line);
+        if (!folded && Folds.endOf(buffer.lines(), indentDepths, line) < 0) {
+            return;
+        }
+        int colour = folded ? Ui.TEXT : Ui.CODE_GUTTER;
+        int centreX = gutterRight - 1 - FOLD_WIDTH / 2;
+        int centreY = y + 3;
+        Gui.drawRect(centreX - 2, centreY, centreX + 3, centreY + 1, colour);
+        if (folded) {
+            Gui.drawRect(centreX, centreY - 2, centreX + 1, centreY + 3, colour);
+        }
+    }
+
+    /** What stands in for a folded block at the end of its opening line. Clicking the gutter brings it back. */
+    private void drawFoldedTail(int line, int y) {
+        int x = textLeft() + widthTo(
+            line,
+            buffer.line(line)
+                .length())
+            - leftPixel
+            + 4;
+        int width = this.fontRendererObj.getStringWidth("...");
+        Gui.drawRect(x - 2, y - 1, x + width + 2, y + LINE_HEIGHT - 2, Ui.CODE_FOLDED);
+        this.fontRendererObj.drawString("...", x, y, Ui.CODE_COMMENT);
+    }
+
+    /**
+     * A dotted rule down each level of indentation a line is inside.
+     *
+     * <p>
+     * The full height of the row, so the pieces on consecutive lines join into one rule per block - which is the
+     * whole point, and why a blank line borrows its depth from its neighbours rather than breaking it. Placed by the
+     * width of a space and not by {@link #widthTo}: the rule belongs to the level, not to whatever characters a
+     * particular line happens to have there, and a blank line has none to measure.
+     *
+     * <p>
+     * Dotted because the gutter's edge is solid and stands right beside the first of them: two solid lines a few
+     * pixels apart are a double border, a solid one and a dotted one are a border and a guide. The dots are taken from
+     * the screen row and not counted from the top of the line - a line is eleven pixels, an odd number, so a pattern
+     * restarted on each would stutter where two lines meet.
+     */
+    private void drawIndentGuides(int line, int y) {
+        if (line >= indentDepths.length) {
+            return;
+        }
+        int step = INDENT.length() * this.fontRendererObj.getCharWidth(' ');
+        int guides = IndentGuides.count(indentDepths[line], INDENT.length());
+        for (int level = 0; level < guides; level++) {
+            int x = textLeft() + level * step - leftPixel;
+            for (int dot = y - 1; dot < y + LINE_HEIGHT - 1; dot++) {
+                if ((dot & 1) == 0) {
+                    Gui.drawRect(x, dot, x + 1, dot + 1, Ui.CODE_INDENT_GUIDE);
+                }
+            }
+        }
     }
 
     private void drawLine(int line, int y) {
@@ -384,8 +636,18 @@ public class GuiScriptEditor extends UiScreen {
         switch (kind) {
             case KEYWORD:
                 return Ui.CODE_KEYWORD;
+            case DECLARATION:
+                return Ui.CODE_DECLARATION;
+            case CONSTANT:
+                return Ui.CODE_CONSTANT;
+            case SELF:
+                return Ui.CODE_SELF;
             case API:
                 return Ui.CODE_API;
+            case FUNCTION:
+                return Ui.CODE_FUNCTION;
+            case FIELD:
+                return Ui.CODE_FIELD;
             case STRING:
                 return Ui.CODE_STRING;
             case NUMBER:
@@ -426,7 +688,7 @@ public class GuiScriptEditor extends UiScreen {
         if (blinkTicks / 6 % 2 != 0) {
             return;
         }
-        int row = buffer.caretLine() - topLine;
+        int row = rowOf(buffer.caretLine()) - topRow;
         if (row < 0 || row >= rows) {
             return;
         }
@@ -558,10 +820,18 @@ public class GuiScriptEditor extends UiScreen {
     }
 
     private void placeCaret(int mouseX, int mouseY, boolean select) {
-        int row = (mouseY - textTop() + 1) / LINE_HEIGHT;
-        int line = Math.max(0, Math.min(buffer.lineCount() - 1, topLine + Math.max(0, row)));
+        int line = lineAtRow(topRow + Math.max(0, (mouseY - textTop() + 1) / LINE_HEIGHT));
         buffer.moveTo(line, columnAt(line, mouseX - textLeft() + leftPixel), select);
         afterMove();
+    }
+
+    /** The line whose gutter the cursor is on, or -1 when it is not on the gutter or below the last line. */
+    private int gutterLineAt(int mouseX, int mouseY) {
+        if (mouseX < viewportLeft() || mouseX > gutterRight() || mouseY < boxTop() || mouseY >= boxBottom()) {
+            return -1;
+        }
+        int row = topRow + (mouseY - textTop() + 1) / LINE_HEIGHT;
+        return row >= 0 && row < visible.length ? visible[row] : -1;
     }
 
     @Override
@@ -570,6 +840,14 @@ public class GuiScriptEditor extends UiScreen {
             int snippet = snippetAt(mouseX, mouseY);
             if (snippet >= 0) {
                 insertSnippet(SNIPPETS.get(snippet));
+                return;
+            }
+        }
+        // The whole gutter and not just the mark: the mark is five pixels across, and a line number is where the eye
+        // already is. A line that opens nothing falls through and takes the caret, as the gutter always did.
+        if (mouseButton == 0) {
+            int gutterLine = gutterLineAt(mouseX, mouseY);
+            if (gutterLine >= 0 && toggleFold(gutterLine)) {
                 return;
             }
         }
@@ -616,7 +894,7 @@ public class GuiScriptEditor extends UiScreen {
             return;
         }
 
-        topLine += wheel > 0 ? -SCROLL_ROWS : SCROLL_ROWS;
+        topRow += wheel > 0 ? -SCROLL_ROWS : SCROLL_ROWS;
         clampScroll();
     }
 
@@ -636,6 +914,7 @@ public class GuiScriptEditor extends UiScreen {
                 } else {
                     buffer.moveLeft(shift);
                 }
+                leaveFold(false, true, shift);
                 afterMove();
                 return true;
             case Keyboard.KEY_RIGHT:
@@ -644,22 +923,27 @@ public class GuiScriptEditor extends UiScreen {
                 } else {
                     buffer.moveRight(shift);
                 }
+                leaveFold(true, true, shift);
                 afterMove();
                 return true;
             case Keyboard.KEY_UP:
                 buffer.moveUp(1, shift);
+                leaveFold(false, false, shift);
                 afterMove();
                 return true;
             case Keyboard.KEY_DOWN:
                 buffer.moveDown(1, shift);
+                leaveFold(true, false, shift);
                 afterMove();
                 return true;
             case Keyboard.KEY_PRIOR:
                 buffer.moveUp(visibleRows(), shift);
+                leaveFold(false, false, shift);
                 afterMove();
                 return true;
             case Keyboard.KEY_NEXT:
                 buffer.moveDown(visibleRows(), shift);
+                leaveFold(true, false, shift);
                 afterMove();
                 return true;
             case Keyboard.KEY_HOME:
@@ -673,6 +957,7 @@ public class GuiScriptEditor extends UiScreen {
             case Keyboard.KEY_END:
                 if (control) {
                     buffer.moveToEnd(shift);
+                    leaveFold(true, true, shift);
                 } else {
                     buffer.moveToLineEnd(shift);
                 }
