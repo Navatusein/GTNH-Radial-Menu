@@ -30,10 +30,33 @@ public final class LuaSyntax {
     public enum Kind {
         /** Identifiers, whitespace, anything unremarkable. */
         PLAIN,
-        /** Lua's own reserved words. */
+        /** Lua's reserved words that shape the code: {@code if}, {@code local}, {@code function}. */
         KEYWORD,
-        /** Names this mod puts in a script's environment, and their members. */
+        /**
+         * {@code local}, on its own.
+         *
+         * <p>
+         * It is the one reserved word that says nothing about what the code does and everything about where a name
+         * lives, and it opens more lines of a script than any other - in the keywords' colour it turns the left edge
+         * of a script into one solid stripe.
+         */
+        DECLARATION,
+        /**
+         * Words that stand for a value rather than shape anything: {@code nil}, {@code true}, {@code false}.
+         *
+         * <p>
+         * They are reserved words and were coloured as such, which put {@code return nil} in one colour from end to
+         * end - the statement and the thing it hands back, indistinguishable.
+         */
+        CONSTANT,
+        /** {@code self}: not reserved at all, but a name nobody chooses and everybody reads the same way. */
+        SELF,
+        /** The tables a script is handed - {@code chat}, {@code player}, {@code string} - where they are not called. */
         API,
+        /** A name with a bracket after it: something being called, or defined, whoever it belongs to. */
+        FUNCTION,
+        /** A known member read rather than called: {@code player.name}, {@code stack.icon}. */
+        FIELD,
         STRING,
         NUMBER,
         COMMENT,
@@ -71,22 +94,30 @@ public final class LuaSyntax {
             "else",
             "elseif",
             "end",
-            "false",
             "for",
             "function",
             "goto",
             "if",
             "in",
-            "local",
-            "nil",
             "not",
             "or",
             "repeat",
             "return",
             "then",
-            "true",
             "until",
             "while"));
+
+    private static final Set<String> CONSTANTS = new HashSet<>(Arrays.asList("nil", "true", "false"));
+
+    /**
+     * Lua's own libraries, which are globals a script is handed but not ones this mod wrote.
+     *
+     * <p>
+     * The difference matters after a dot. {@link #MEMBERS} lists what the mod's tables carry, so a name missing from it
+     * is a misspelling and is left plain to say so; it does not list {@code string.format} and its forty relatives,
+     * and holding those to the same list would paint every correct call as a typo.
+     */
+    private static final Set<String> STANDARD = new HashSet<>(Arrays.asList("string", "table", "math"));
 
     /** What a script is handed: see {@code ScriptApi} and the prelude. */
     private static final Set<String> GLOBALS = new HashSet<>(
@@ -112,8 +143,8 @@ public final class LuaSyntax {
      * Members worth colouring after a dot.
      *
      * <p>
-     * Only after a dot, which is the point: {@code chat.send} comes out as API twice and {@code chat.sned} leaves the
-     * misspelling plain, so the editor says what a careful read of the docs would have.
+     * Only after a dot, which is the point: {@code chat.send} is coloured and {@code chat.sned} is left plain, bracket
+     * or no bracket, so the editor says what a careful read of the docs would have.
      */
     private static final Set<String> MEMBERS = new HashSet<>(
         Arrays.asList(
@@ -267,7 +298,11 @@ public final class LuaSyntax {
                     while (end < line.length() && isWordPart(line.charAt(end))) {
                         end++;
                     }
-                    tokens.add(new Token(index, end, wordKind(line.substring(index, end), afterDot(tokens, line))));
+                    tokens.add(
+                        new Token(
+                            index,
+                            end,
+                            wordKind(line.substring(index, end), ownerBeforeDot(line, index), isCalled(line, end))));
                     index = end;
                     continue;
                 }
@@ -296,26 +331,78 @@ public final class LuaSyntax {
         return all;
     }
 
-    /** True if the last thing on the line was a dot, so the next word is a member rather than a name of its own. */
-    private static boolean afterDot(List<Token> tokens, String line) {
-        for (int i = tokens.size() - 1; i >= 0; i--) {
-            Token token = tokens.get(i);
-            if (token.kind == Kind.PLAIN) {
-                continue;
-            }
-            // Exactly a dot: a one-character run rules out "(" and ",", and the length rules out ".." - a word after a
-            // concatenation is a name of its own, not a member of anything.
-            return token.kind == Kind.OPERATOR && token.length() == 1 && line.charAt(token.start) == '.';
+    /**
+     * The name a word is a member of: what stands before the dot in front of it. Null when there is no dot, and empty
+     * when there is one with something other than a name before it - a closing bracket, say.
+     *
+     * <p>
+     * Exactly one dot: two are a concatenation, and the word after {@code ..} is a name of its own, not a member of
+     * anything.
+     */
+    private static String ownerBeforeDot(String line, int wordStart) {
+        int index = skipSpacesBack(line, wordStart - 1);
+        if (index < 0 || line.charAt(index) != '.' || (index > 0 && line.charAt(index - 1) == '.')) {
+            return null;
         }
-        return false;
+        int end = skipSpacesBack(line, index - 1) + 1;
+        int start = end;
+        while (start > 0 && isWordPart(line.charAt(start - 1))) {
+            start--;
+        }
+        return line.substring(start, end);
     }
 
-    private static Kind wordKind(String word, boolean afterDot) {
+    private static int skipSpacesBack(String line, int from) {
+        int index = from;
+        while (index >= 0 && (line.charAt(index) == ' ' || line.charAt(index) == '\t')) {
+            index--;
+        }
+        return index;
+    }
+
+    /** Whether a bracket opens after the word, which is what a call and a definition both look like. */
+    private static boolean isCalled(String line, int wordEnd) {
+        int index = wordEnd;
+        while (index < line.length() && (line.charAt(index) == ' ' || line.charAt(index) == '\t')) {
+            index++;
+        }
+        return index < line.length() && line.charAt(index) == '(';
+    }
+
+    /**
+     * What a word is, from the word and the two things next to it.
+     *
+     * <p>
+     * A member of one of the mod's own tables is the strict case: it has to be one the table really carries, and a
+     * name it does not carry stays plain even with a bracket after it - that bracket is on a call that will fail.
+     * Everywhere else a bracket is enough to make a function, because a script's own functions and the methods of its
+     * values are nothing this could have a list of.
+     */
+    private static Kind wordKind(String word, String owner, boolean called) {
         if (KEYWORDS.contains(word)) {
             return Kind.KEYWORD;
         }
-        if (afterDot) {
-            return MEMBERS.contains(word) ? Kind.API : Kind.PLAIN;
+        if ("local".equals(word)) {
+            return Kind.DECLARATION;
+        }
+        if (CONSTANTS.contains(word)) {
+            return Kind.CONSTANT;
+        }
+        if ("self".equals(word)) {
+            return Kind.SELF;
+        }
+        if (owner != null) {
+            boolean known = MEMBERS.contains(word);
+            if (GLOBALS.contains(owner) && !STANDARD.contains(owner) && !known) {
+                return Kind.PLAIN;
+            }
+            if (called) {
+                return Kind.FUNCTION;
+            }
+            return known ? Kind.FIELD : Kind.PLAIN;
+        }
+        if (called) {
+            return Kind.FUNCTION;
         }
         return GLOBALS.contains(word) ? Kind.API : Kind.PLAIN;
     }

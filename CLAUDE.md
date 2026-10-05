@@ -516,6 +516,18 @@ that wheel instead of waiting for an answer nothing is being asked for.
 an API call in the script editor, and `ScriptSnippetsTest` checks every snippet against it - so a new member of
 `player` is added in three places or the test says so.
 
+**In the script editor a row is not a line.** Folding hides lines, so everything that scrolls or hit-tests counts
+rows into `visible` and only then asks which line a row is; `core/text/Folds` remembers nothing but the folded opening
+lines and works their extents out from indentation each time, the same reading `IndentGuides` gives the rules. The
+buffer does not report what an edit did, so `rememberSpan` notes the selection or caret line every time the caret
+comes to rest, and `Folds.edited` uses that to carry folds below an edit along with their text. A caret must never be
+under a fold: a key that moves it there steps on out the far side, and an edit that leaves it there opens the fold.
+
+**A word's colour comes from the word and its two neighbours.** `LuaSyntax` is still not a parser: a bracket after a
+name makes it a function, a dot before it makes it a member, and a member of one of the mod's own tables has to be in
+`MEMBERS` or it stays plain - bracket or not - which is how a misspelt API call shows. Lua's own `string`, `table` and
+`math` are exempt from that list, or every `string.format` would read as a typo.
+
 **The host is asked for the next chat line, not for a match.** Putting the matching on the Java side would mean a second
 implementation of Lua patterns, drifting from the one the script can see.
 
