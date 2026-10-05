@@ -193,6 +193,13 @@ them where its entry is, which is what made this a correction rather than a pref
 all the way down even where nothing is open: a branch left in the set brings back whatever was open inside it the
 next time it is unfolded.
 
+**Going back from a replacing submenu restores the wheel it was chosen from, rings and all.** A `replace` submenu
+picked off an unfolded inline ring takes over the whole wheel. The inline menus on the way to it used to be pushed
+onto the path as menus of their own, so the step back showed the inline parent filling the screen - a view of it the
+player had never opened. They are kept beside the path instead, in `unfoldedBehind`, and unfolded again around the
+menu they hung off when the submenu is left. The header still names them, because once the ring is off screen
+nothing else says how the submenu was reached.
+
 **Escape leaves the screen; right-click walks back through it.** They were one method, so Escape on an unfolded
 branch spent itself folding that branch away and the wheel stayed up - the player asking for the wheel to go away and
 being given one fewer ring. `goBackOrClose` is the step back: the branch under the cursor, then the submenu the wheel

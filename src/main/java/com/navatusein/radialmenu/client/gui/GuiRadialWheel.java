@@ -69,6 +69,18 @@ public class GuiRadialWheel extends GuiScreen {
     private final Deque<MenuNode> path = new ArrayDeque<>();
 
     /**
+     * For each menu drilled into, the inline branches that were unfolded on the way to it - outermost first.
+     *
+     * <p>
+     * One entry per step of {@link #path} past the root, pushed and popped with it. A replacing submenu chosen off an
+     * unfolded ring takes the whole wheel, ring included, and going back has to put that wheel back the way it was
+     * left: the same menu in the middle with the same branch open. These were once pushed onto the path as menus of
+     * their own, which did walk back through them in order - but as wheels, so the step back from a submenu showed its
+     * inline parent filling the screen, a view of that menu the player had never opened and had not asked for.
+     */
+    private final Deque<List<MenuNode>> unfoldedBehind = new ArrayDeque<>();
+
+    /**
      * Inline submenus currently unfolded.
      *
      * <p>
@@ -172,6 +184,7 @@ public class GuiRadialWheel extends GuiScreen {
      */
     public void replaceRoot(MenuNode root) {
         path.clear();
+        unfoldedBehind.clear();
         path.push(root);
         forgetExpanded();
         lastChosen = null;
@@ -661,27 +674,37 @@ public class GuiRadialWheel extends GuiScreen {
      * Overlays".
      *
      * <p>
-     * Inline submenus are not in it. They are on screen with their own entry beside them, so naming them in the
-     * header would say twice what the ring already says - and with two branches open there is no single path to
-     * write down.
+     * Inline submenus that are unfolded now are not in it. They are on screen with their own entry beside them, so
+     * naming them in the header would say twice what the ring already says - and with two branches open there is no
+     * single path to write down. The ones a replacing submenu was reached through are: that ring is gone from the
+     * screen, and without its name the header would claim the submenu hangs straight off the menu before it.
      */
     private String breadcrumb() {
         StringBuilder builder = new StringBuilder();
         MenuNode[] nodes = path.toArray(new MenuNode[0]);
+        List<List<MenuNode>> behind = new ArrayList<>(unfoldedBehind);
         // The deque has the current menu first, so walk it backwards to read root-to-here. A script's root is named
         // here rather than skipped: the profile name says nothing about a menu the script built, so its own title is
         // the only thing that would.
         for (int i = nodes.length - (scripted ? 1 : 2); i >= 0; i--) {
-            String title = nodes[i].title;
-            if (title == null || title.isEmpty()) {
-                continue;
+            if (i < behind.size()) {
+                for (MenuNode inline : behind.get(i)) {
+                    appendTitle(builder, inline);
+                }
             }
-            if (builder.length() > 0) {
-                builder.append(" > ");
-            }
-            builder.append(title);
+            appendTitle(builder, nodes[i]);
         }
         return builder.toString();
+    }
+
+    private static void appendTitle(StringBuilder builder, MenuNode node) {
+        if (node.title == null || node.title.isEmpty()) {
+            return;
+        }
+        if (builder.length() > 0) {
+            builder.append(" > ");
+        }
+        builder.append(node.title);
     }
 
     @Override
@@ -826,18 +849,16 @@ public class GuiRadialWheel extends GuiScreen {
      * Drills into a replacing submenu, which takes over the whole wheel.
      *
      * <p>
-     * The rings between the middle and the chosen entry go onto the path too: they are menus the player walked
-     * through to get here, and going back has to walk back out of them in the order they were opened rather than
-     * jumping to the root.
+     * The rings between the middle and the chosen entry are remembered beside the path rather than on it: they are
+     * what the player had unfolded to get here, and going back has to unfold them again around the menu they hung
+     * off - not show each of them as a wheel of its own.
      */
     private void enterMenu(WheelRing from, MenuNode selected) {
         Deque<MenuNode> opened = new ArrayDeque<>();
         for (WheelRing ring = from; ring != null && ring.level > 0; ring = ringAt(ring.parent)) {
             opened.push(ring.menu);
         }
-        for (MenuNode menu : opened) {
-            path.push(menu);
-        }
+        unfoldedBehind.push(new ArrayList<>(opened));
         path.push(selected);
 
         // Whatever was unfolded belonged to the menu that has just left the screen.
@@ -875,6 +896,12 @@ public class GuiRadialWheel extends GuiScreen {
         if (path.size() > 1) {
             path.pop();
             forgetExpanded();
+            // Back to the wheel as it was left: whatever was unfolded when the submenu was chosen is unfolded again.
+            // Straight into the set and not through expand - these were one chain, so there are no siblings to fold,
+            // and a branch that has stopped being inline since is simply not drawn.
+            if (!unfoldedBehind.isEmpty()) {
+                expanded.addAll(unfoldedBehind.pop());
+            }
             hoveredRing = 0;
             hoveredSlot = RadialGeometry.NO_SLOT;
         } else {
