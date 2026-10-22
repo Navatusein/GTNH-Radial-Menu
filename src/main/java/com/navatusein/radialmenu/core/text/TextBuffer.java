@@ -247,6 +247,18 @@ public final class TextBuffer {
         moveTo(caretLine, column, select);
     }
 
+    /**
+     * Turns every line break into a single {@code \n}.
+     *
+     * <p>
+     * A pair is one break, not two: the Windows clipboard hands text over with {@code \r\n} whatever the file it was
+     * copied from used, so reading the two characters separately pastes a blank line under every line.
+     */
+    public static String normalizeLineBreaks(String text) {
+        return text.replace("\r\n", "\n")
+            .replace('\r', '\n');
+    }
+
     /** Replaces the selection, or inserts at the caret. Newlines in the text split lines, so paste works. */
     public void insert(String text) {
         if (text == null || text.isEmpty()) {
@@ -254,9 +266,7 @@ public final class TextBuffer {
         }
         deleteSelection();
 
-        String[] parts = text.replace("\r\n", "\n")
-            .replace('\r', '\n')
-            .split("\n", -1);
+        String[] parts = normalizeLineBreaks(text).split("\n", -1);
         String current = line(caretLine);
         String before = current.substring(0, caretColumn);
         String after = current.substring(caretColumn);
