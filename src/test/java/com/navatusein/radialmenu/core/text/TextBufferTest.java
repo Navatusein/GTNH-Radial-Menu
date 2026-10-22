@@ -38,6 +38,15 @@ public class TextBufferTest {
     }
 
     @Test
+    public void aWindowsLineBreakIsOneBreakNotTwo() {
+        // The Windows clipboard holds \r\n whatever the copied file used; read as two breaks, every pasted line came
+        // out with a blank one under it.
+        assertEquals("one\ntwo\nthree\n", TextBuffer.normalizeLineBreaks("one\r\ntwo\r\nthree\r\n"));
+        assertEquals("one\ntwo\nthree", TextBuffer.normalizeLineBreaks("one\rtwo\nthree"));
+        assertEquals("one\n\ntwo", TextBuffer.normalizeLineBreaks("one\r\n\r\ntwo"));
+    }
+
+    @Test
     public void pastedTextSplitsIntoLines() {
         TextBuffer buffer = buffer("start|end");
         buffer.moveTo(0, 6, false);
