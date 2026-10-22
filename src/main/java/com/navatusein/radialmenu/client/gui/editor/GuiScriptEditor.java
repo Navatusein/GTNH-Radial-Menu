@@ -1034,10 +1034,11 @@ public class GuiScriptEditor extends UiScreen implements GuiIconPicker.Callback 
         if (text == null) {
             return "";
         }
+        text = TextBuffer.normalizeLineBreaks(text);
         StringBuilder kept = new StringBuilder(text.length());
         for (int i = 0; i < text.length(); i++) {
             char c = text.charAt(i);
-            if (c == '\n' || c == '\r') {
+            if (c == '\n') {
                 kept.append('\n');
             } else if (c == '\t') {
                 kept.append(INDENT);
