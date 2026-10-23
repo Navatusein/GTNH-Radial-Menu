@@ -525,6 +525,15 @@ over again every tick while the script is suspended inside it, so `Run.shownMenu
 "still waiting on this one" from "a second question" - and a second question while the run's own wheel is up goes into
 that wheel instead of waiting for an answer nothing is being asked for.
 
+**A form is a prompt with more questions, and the rules for answers live in `core`.** `prompt` handed a table becomes
+a `ScriptForm`: the screen only holds a string per control, and `ScriptForm.Field.check` and `value` decide whether it
+is acceptable and what the script is given - a number, a boolean, an option's key. The form stays up until every answer
+passes, so a script never has to re-check a range it already declared. A complaint is one line at the foot of the
+form, with the field's label and box turned red, never a line under the field: that line would have to be reserved
+before anything is wrong - a row that grew would move the fields below it out from under the cursor - and reserved
+under every field that could fail, it put uneven gaps between rows that looked alike. Descriptions wrap rather than
+being cut, and the label column is as wide as the longest label.
+
 **A field the editor does not know about is a field that does not highlight.** `LuaSyntax.MEMBERS` is what colours
 an API call in the script editor, and `ScriptSnippetsTest` checks every snippet against it - so a new member of
 `player` is added in three places or the test says so.

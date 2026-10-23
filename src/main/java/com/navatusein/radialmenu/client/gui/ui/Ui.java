@@ -111,8 +111,13 @@ public final class Ui {
 
     /** Right-aligned label for the control that sits beside it, vertically centred against a {@link #ROW}. */
     public static void rowLabel(String text, int left, int rowTop) {
+        rowLabel(text, left, rowTop, LABEL_WIDTH, TEXT_MUTED);
+    }
+
+    /** The same, for a label column of another width - a form sizes its own to its longest label. */
+    public static void rowLabel(String text, int left, int rowTop, int width, int colour) {
         FontRenderer font = font();
-        font.drawString(text, left + LABEL_WIDTH - font.getStringWidth(text), rowTop + (ROW - 8) / 2, TEXT_MUTED);
+        font.drawString(text, left + width - font.getStringWidth(text), rowTop + (ROW - 8) / 2, colour);
     }
 
     /**

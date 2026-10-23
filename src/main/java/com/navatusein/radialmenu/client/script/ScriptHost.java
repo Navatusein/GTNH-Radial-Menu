@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.EnumChatFormatting;
 
@@ -14,10 +15,12 @@ import com.navatusein.radialmenu.RadialMenuMod;
 import com.navatusein.radialmenu.client.action.ActionExecutors;
 import com.navatusein.radialmenu.client.gui.GuiRadialWheel;
 import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.gui.editor.GuiScriptForm;
 import com.navatusein.radialmenu.client.gui.editor.GuiTextPrompt;
 import com.navatusein.radialmenu.core.action.ActionSpec;
 import com.navatusein.radialmenu.core.action.ActionTypes;
 import com.navatusein.radialmenu.core.model.MenuNode;
+import com.navatusein.radialmenu.core.script.ScriptForm;
 import com.navatusein.radialmenu.core.script.ScriptLimits;
 import com.navatusein.radialmenu.core.script.ScriptRequest;
 import com.navatusein.radialmenu.core.script.ScriptTask;
@@ -99,11 +102,14 @@ public final class ScriptHost {
         /** The inline ring the player folded away - a dismissal with the wheel itself still on screen. */
         boolean collapsed;
 
-        /** The text box this run put up, while it is still on screen. */
-        GuiTextPrompt prompt;
+        /** The text box or form this run put up, while it is still on screen. */
+        GuiScreen asking;
 
-        /** What the player typed, waiting to be handed over on the next pump. */
-        String typed;
+        /**
+         * What came back from it, waiting to be handed over on the next pump: the typed text for a prompt, the answers
+         * keyed by field for a form.
+         */
+        Object answer;
 
         boolean answered;
 
@@ -315,7 +321,8 @@ public final class ScriptHost {
                 return true;
 
             case PROMPT:
-                return openOrResolvePrompt(run, request);
+            case FORM:
+                return openOrResolveQuestion(run, request);
 
             default:
                 RadialMenuMod.LOG.warn("Unknown script request " + request.kind);
@@ -448,7 +455,7 @@ public final class ScriptHost {
     }
 
     /**
-     * Puts the text box up, or hands over what came back from it.
+     * Puts the text box or the form up, or hands over what came back from it.
      *
      * <p>
      * The same shape as a menu, and for the same reason: the answer arrives from a screen rather than from this
@@ -456,63 +463,101 @@ public final class ScriptHost {
      * because confirming is what closes it - the other order would turn every answer into a cancellation.
      *
      * <p>
-     * A screen going away with nothing typed is a cancellation however it went: Escape, the cancel button, or
+     * A screen going away with nothing confirmed is a cancellation however it went: Escape, the cancel button, or
      * another mod taking the screen. All three mean the player is not answering, and {@code nil} is what a script
      * already tests for after a dismissed menu.
      */
-    private static boolean openOrResolvePrompt(Run run, ScriptRequest request) {
+    private static boolean openOrResolveQuestion(Run run, ScriptRequest request) {
         if (run.answered) {
-            String typed = run.typed;
+            Object answer = run.answer;
             run.answered = false;
-            run.typed = null;
-            run.prompt = null;
-            run.task.resumeText(typed);
+            run.answer = null;
+            run.asking = null;
+            answer(run, request, answer);
             return true;
         }
 
         Minecraft mc = Minecraft.getMinecraft();
-        if (run.prompt != null) {
-            if (mc.currentScreen == run.prompt) {
+        if (run.asking != null) {
+            if (mc.currentScreen == run.asking) {
                 return false;
             }
-            run.prompt = null;
-            run.task.resumeText(null);
+            run.asking = null;
+            answer(run, request, null);
             return true;
         }
 
         if (mc.thePlayer == null) {
-            run.task.resumeText(null);
+            answer(run, request, null);
             return true;
         }
         // Somebody else's screen is open, exactly as with a menu: taking it away mid-use is worse than not asking.
         if (mc.currentScreen != null && !(mc.currentScreen instanceof GuiRadialWheel)) {
-            RadialMenuMod.LOG.debug("[" + run.token + "] a screen was open, so the script's prompt was not shown");
-            run.task.resumeText(null);
+            RadialMenuMod.LOG.debug("[" + run.token + "] a screen was open, so the script's question was not shown");
+            answer(run, request, null);
             return true;
         }
 
-        final Run owner = run;
+        GuiScreen screen = request.kind == ScriptRequest.Kind.FORM ? formScreen(run, request.form)
+            : promptScreen(run, request);
+        run.asking = screen;
+        // A wheel of this run's own is taken down first rather than pushed under the box. Left up it would be the
+        // screen the box returns to when it closes - a wheel nothing is waiting on, belonging to a script that
+        // has moved past it - and closing it here is also what keeps that closure from reading as a dismissal.
+        closeWheel(run);
+        GuiStack.push(screen);
+        return false;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void answer(Run run, ScriptRequest request, Object answer) {
+        if (request.kind == ScriptRequest.Kind.FORM) {
+            run.task.resumeForm((Map<String, String>) answer);
+        } else {
+            run.task.resumeText((String) answer);
+        }
+    }
+
+    private static GuiScreen promptScreen(final Run run, ScriptRequest request) {
         // The title goes through the translator, which runs it past String.format on the way out - so a per cent
         // sign a script wrote for a player to read is doubled here rather than coming out as "Format error".
         String title = request.text == null ? "" : request.text.replace("%", "%%");
-        GuiTextPrompt prompt = new GuiTextPrompt(title, request.key, new GuiTextPrompt.Result() {
+        return new GuiTextPrompt(title, request.key, new GuiTextPrompt.Result() {
 
             @Override
             public String onConfirm(String value) {
-                owner.typed = value;
-                owner.answered = true;
+                run.answer = value;
+                run.answered = true;
                 // Nothing to object to: whether the text is any good is the script's business, and it is the one
                 // that can say so in chat.
                 return null;
             }
         });
-        run.prompt = prompt;
-        // A wheel of this run's own is taken down first rather than pushed under the box. Left up it would be the
-        // screen the prompt returns to when it closes - a wheel nothing is waiting on, belonging to a script that
-        // has moved past it - and closing it here is also what keeps that closure from reading as a dismissal.
-        closeWheel(run);
-        GuiStack.push(prompt);
-        return false;
+    }
+
+    private static GuiScreen formScreen(final Run run, ScriptForm form) {
+        return new GuiScriptForm(form, new GuiScriptForm.Result() {
+
+            @Override
+            public void onConfirm(Map<String, String> answers) {
+                run.answer = answers;
+                run.answered = true;
+            }
+        });
+    }
+
+    /**
+     * Takes down a box or form this run left up.
+     *
+     * <p>
+     * For a run that ends while the player is still looking at its question - cancelled, timed out, or restarted by
+     * choosing its entry again. Left up, the box would take an answer nothing is waiting for any more.
+     */
+    private static void closeQuestion(Run run) {
+        if (run.asking != null && Minecraft.getMinecraft().currentScreen == run.asking) {
+            GuiStack.pop();
+        }
+        run.asking = null;
     }
 
     private static void closeWheel(Run run) {
@@ -557,6 +602,7 @@ public final class ScriptHost {
     private static void cancel(Run run, String reason) {
         run.task.cancel(reason);
         closeWheel(run);
+        closeQuestion(run);
         RadialMenuMod.LOG.warn("[" + run.token + "] cancelled: " + reason);
     }
 
@@ -568,6 +614,7 @@ public final class ScriptHost {
                 iterator.remove();
                 run.task.cancel(reason == null ? "restarted" : reason);
                 closeWheel(run);
+                closeQuestion(run);
             }
         }
     }
