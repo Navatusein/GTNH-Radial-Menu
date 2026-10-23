@@ -89,6 +89,20 @@ public abstract class UiScreen extends GuiScreen {
         return -1;
     }
 
+    /**
+     * The tallest {@link #panelHeightHint} that still leaves the dialog, its title band and its button bar on screen.
+     *
+     * <p>
+     * For a dialog whose length the screen does not decide - a script's form has as many fields as the script asked
+     * for - so it can cap itself and scroll rather than run off the bottom edge.
+     */
+    protected int maxPanelHeightHint() {
+        int margins = Ui.PAD * 2 * 2;
+        int chrome = Ui.PAD + TITLE_BAND + Ui.GAP + Ui.PAD;
+        int bar = Ui.GAP + Ui.ROW;
+        return Math.max(Ui.STEP, this.height - margins - chrome - bar);
+    }
+
     /** Builds the button list and any text fields. Never call this from {@code actionPerformed}. */
     protected abstract void buildControls();
 

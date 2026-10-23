@@ -1,7 +1,10 @@
 package com.navatusein.radialmenu.core.script;
 
+import java.util.Map;
+
 import org.luaj.vm2.Globals;
 import org.luaj.vm2.LuaError;
+import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaThread;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Varargs;
@@ -158,6 +161,36 @@ public final class ScriptTask {
     public void resumeText(String text) {
         expect(ScriptRequest.Kind.PROMPT);
         resume(text == null ? LuaValue.NIL : LuaValue.valueOf(text));
+    }
+
+    /**
+     * Answers {@link ScriptRequest.Kind#FORM}.
+     *
+     * <p>
+     * Each answer is turned into what its field promises - a number, a boolean, an option's key - here rather than by
+     * the host, which only knows what the controls held. A number nobody had to give and nobody gave is left out,
+     * which is the nil a script reading it gets.
+     *
+     * @param answers what each field held, keyed by field, or null if the player cancelled
+     */
+    public void resumeForm(Map<String, String> answers) {
+        expect(ScriptRequest.Kind.FORM);
+        if (answers == null) {
+            resume(LuaValue.NIL);
+            return;
+        }
+        LuaTable result = new LuaTable();
+        for (ScriptForm.Field field : pending.form.fields) {
+            Object value = field.value(answers.get(field.key));
+            if (value instanceof Double) {
+                result.set(field.key, LuaValue.valueOf(((Double) value).doubleValue()));
+            } else if (value instanceof Boolean) {
+                result.set(field.key, LuaValue.valueOf(((Boolean) value).booleanValue()));
+            } else if (value != null) {
+                result.set(field.key, LuaValue.valueOf((String) value));
+            }
+        }
+        resume(result);
     }
 
     /**
