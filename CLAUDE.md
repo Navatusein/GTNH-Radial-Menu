@@ -272,6 +272,12 @@ loop continue over the new buttons and fire them too. Adding an auto-bind rule t
 the add button each time, moving it forward faster than the loop index, and the game died with no stack trace. Call
 `requestRebuild()` instead; it rebuilds before the next frame.
 
+**A key held when a screen opens must not type into it.** A script's prompt opens while the wheel key is often still
+down, and `UiScreen` turns repeat events on, so the key typed itself into the box until released. Under lwjgl3ify the
+character does not even ride on the key event: SDL sends the key, then a text event of its own with key code
+`KEY_NONE`, which no check on the key code recognises. `KeysHeldOnOpen` swallows the held key's events and the text
+event directly after each one; it is taken at construction, because `initGui` reruns on every resize.
+
 Other traps the same code has already fallen into:
 
 - Returning from a pushed screen re-runs `initGui`, which rebuilds text fields from the model. Capture what the
