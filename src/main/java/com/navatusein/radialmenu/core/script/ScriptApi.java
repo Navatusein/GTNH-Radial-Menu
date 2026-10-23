@@ -3,10 +3,15 @@ package com.navatusein.radialmenu.core.script;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 import org.luaj.vm2.Globals;
+import org.luaj.vm2.LuaError;
 import org.luaj.vm2.LuaTable;
 import org.luaj.vm2.LuaValue;
 import org.luaj.vm2.Varargs;
@@ -147,6 +152,10 @@ final class ScriptApi {
 
             @Override
             public Varargs invoke(Varargs args) {
+                if (args.arg1()
+                    .istable()) {
+                    return task.yieldRequest(ScriptRequest.form(formOf(args.checktable(1))));
+                }
                 return task.yieldRequest(
                     ScriptRequest.prompt(args.optjstring(1, "radialmenu.script.prompt"), args.optjstring(2, "")));
             }
@@ -463,6 +472,155 @@ final class ScriptApi {
      * writes
      * {@code holdTicks = 20} and means the same thing, so numbers and booleans are converted rather than refused.
      */
+    /** More fields than this will not fit on a screen at any GUI scale worth playing at. */
+    static final int MAX_FORM_FIELDS = 12;
+
+    /**
+     * Reads the table {@code prompt} was handed.
+     *
+     * <p>
+     * Strict where a mistake would otherwise be silent: an unknown type, a choice with nothing to choose, two fields
+     * answering to the same key, a default the field could never hold. Each is an error naming the field, because
+     * the alternative is a form that quietly asks something other than what the script meant, and returns answers the
+     * script then misreads.
+     */
+    static ScriptForm formOf(LuaTable table) {
+        LuaValue rawFields = table.get("fields");
+        if (!rawFields.istable() || rawFields.length() == 0) {
+            throw new LuaError("prompt: 'fields' must be a list with at least one field");
+        }
+        if (rawFields.length() > MAX_FORM_FIELDS) {
+            throw new LuaError("prompt: at most " + MAX_FORM_FIELDS + " fields, got " + rawFields.length());
+        }
+
+        List<ScriptForm.Field> fields = new ArrayList<>();
+        Set<String> keys = new HashSet<>();
+        for (int i = 1; i <= rawFields.length(); i++) {
+            LuaValue raw = rawFields.get(i);
+            if (!raw.istable()) {
+                throw new LuaError("prompt: field " + i + " is not a table");
+            }
+            ScriptForm.Field field = fieldOf(raw, i);
+            if (!keys.add(field.key)) {
+                throw new LuaError("prompt: two fields have the key '" + field.key + "'");
+            }
+            fields.add(field);
+        }
+
+        return new ScriptForm(
+            table.get("title")
+                .optjstring(""),
+            table.get("description")
+                .optjstring(null),
+            fields);
+    }
+
+    private static ScriptForm.Field fieldOf(LuaValue raw, int index) {
+        String label = raw.get("label")
+            .optjstring(null);
+        String key = raw.get("key")
+            .optjstring(label);
+        if (key == null) {
+            throw new LuaError("prompt: field " + index + " needs a key or a label");
+        }
+        String name = "prompt: field '" + key + "'";
+
+        String typeName = raw.get("type")
+            .optjstring("text");
+        ScriptForm.Type type;
+        try {
+            type = ScriptForm.Type.valueOf(typeName.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new LuaError(name + " has unknown type '" + typeName + "' - use text, number, toggle or choice");
+        }
+
+        Double min = numberOrNull(raw.get("min"), name + ": min");
+        Double max = numberOrNull(raw.get("max"), name + ": max");
+        if (min != null && max != null && min > max) {
+            throw new LuaError(name + ": min is above max");
+        }
+        boolean integer = raw.get("integer")
+            .optboolean(false);
+        boolean required = raw.get("required")
+            .optboolean(type == ScriptForm.Type.NUMBER);
+
+        List<ScriptForm.Option> options = new ArrayList<>();
+        if (type == ScriptForm.Type.CHOICE) {
+            LuaValue rawOptions = raw.get("options");
+            if (!rawOptions.istable() || rawOptions.length() == 0) {
+                throw new LuaError(name + " is a choice and needs 'options'");
+            }
+            for (int i = 1; i <= rawOptions.length(); i++) {
+                LuaValue option = rawOptions.get(i);
+                if (option.istable()) {
+                    String optionLabel = option.get("label")
+                        .optjstring(null);
+                    String optionKey = option.get("key")
+                        .optjstring(optionLabel);
+                    if (optionKey == null) {
+                        throw new LuaError(name + ": option " + i + " needs a key or a label");
+                    }
+                    options.add(new ScriptForm.Option(optionKey, optionLabel == null ? optionKey : optionLabel));
+                } else {
+                    options.add(new ScriptForm.Option(option.tojstring(), option.tojstring()));
+                }
+            }
+        }
+
+        LuaValue fallback = raw.get("default");
+        String initial;
+        switch (type) {
+            case NUMBER:
+                Double number = numberOrNull(fallback, name + ": default");
+                initial = number == null ? "" : ScriptForm.formatNumber(number);
+                break;
+            case TOGGLE:
+                if (!fallback.isnil() && !fallback.isboolean()) {
+                    throw new LuaError(name + ": default must be true or false");
+                }
+                initial = Boolean.toString(fallback.optboolean(false));
+                break;
+            case CHOICE:
+                initial = fallback.optjstring(options.get(0).key);
+                boolean known = false;
+                for (ScriptForm.Option option : options) {
+                    known |= option.key.equals(initial);
+                }
+                if (!known) {
+                    throw new LuaError(name + ": default '" + initial + "' is not one of its options");
+                }
+                break;
+            default:
+                initial = fallback.optjstring("");
+                break;
+        }
+
+        return new ScriptForm.Field(
+            key,
+            label == null ? key : label,
+            raw.get("description")
+                .optjstring(null),
+            type,
+            initial,
+            required,
+            min,
+            max,
+            integer,
+            options);
+    }
+
+    /** A number given as a number or as a string that reads as one; nil is null, anything else an error. */
+    private static Double numberOrNull(LuaValue value, String what) {
+        if (value.isnil()) {
+            return null;
+        }
+        Double number = value.isnumber() ? Double.valueOf(value.todouble()) : null;
+        if (number == null || number.isNaN() || number.isInfinite()) {
+            throw new LuaError(what + " must be a number, got " + value.tojstring());
+        }
+        return number;
+    }
+
     private static ActionSpec specOf(LuaValue table) {
         ActionSpec spec = new ActionSpec(
             table.get("type")

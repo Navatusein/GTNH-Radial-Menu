@@ -80,6 +80,8 @@ public final class ScriptSnippets {
             new Snippet("store.get", "store.get(\"key\", \"\")"),
             new Snippet("store.set", "store.set(\"key\", value)"),
             new Snippet("prompt", "prompt(\"Name\")"),
+            new Snippet("prompt form", "prompt({title = \"" + CARET + "\", fields = {}})"),
+            new Snippet("form field", "{key = \"" + CARET + "\", label = \"\", type = \"number\", default = 1}"),
             new Snippet("notify", "notify(\"" + CARET + "\")"),
             new Snippet("log", "log(\"" + CARET + "\")"),
             new Snippet("sleep", "sleep(20)"),

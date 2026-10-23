@@ -304,6 +304,71 @@ store.set("home.last", name)
 
 Both return `nil` when the player changes their mind, the same nothing a dismissed menu gives — so one test covers it.
 
+### Several questions at once
+
+Hand `prompt` a table instead and it puts up a **form**: every field labelled, with a line of explanation under it if
+you give one, answered together. What comes back is a table keyed by field, each answer already the type its field
+promised — a number is a number, a checkbox is `true` or `false`.
+
+```lua
+local size = prompt({
+  title = "Fill chunks",
+  description = "Counted from the chunk you are standing in.",
+  fields = {
+    {
+      key = "forward",
+      label = "Forward",
+      type = "number",
+      default = 2,
+      min = 1,
+      max = 32,
+      integer = true
+    },
+    {
+      key = "side",
+      label = "Sideways",
+      type = "number",
+      default = 3,
+      min = 1,
+      integer = true
+    },
+    {
+      key = "towards",
+      label = "Towards",
+      type = "choice",
+      options = {
+        {
+          key = "right",
+          label = "Right"
+        },
+        {
+          key = "left",
+          label = "Left"
+        }
+      }
+    },
+    {
+      key = "replace",
+      label = "Replace blocks",
+      description = "Off leaves anything already there alone.",
+      type = "toggle"
+    }
+  }
+})
+
+if not size then
+  return
+end
+
+notify(("%d by %d, %s"):format(size.forward, size.side, size.towards))
+```
+
+The form checks what it was told to: a number field refuses letters, a value out of range, or a fraction where
+`integer` is set, and says so under the field instead of closing. So by the time `prompt` returns, `size.forward` is a
+whole number between 1 and 32 and the script does not have to check again.
+
+<kbd>Tab</kbd> moves between text boxes and <kbd>Enter</kbd> confirms.
+
 ---
 
 ## Running the mod's own actions
@@ -613,11 +678,39 @@ like the rest of the profile, which is usually what you want.
 | `log(...)` | A line in the client log, for what the player should not have to read. `print` is the same function. |
 | `sleep(ticks)` | Suspends for that many ticks. 20 is a second. |
 | `prompt(title [, initial])` | Asks for one line of text. `nil` if cancelled. Never returns a blank string. |
+| `prompt(form)` | Asks several things at once — see [Forms](#forms). A table of answers, or `nil` if cancelled. |
 | `store.get(key [, default])` | What was remembered, or the default, or `nil`. |
 | `store.set(key, value)` | Remembers it in `RadialMenu/script-store.json`. `nil` forgets the key. Strings only, both ways — a script that wants a number writes one and reads it back with `tonumber`. |
 | `action.run(spec)` | Runs one of the mod's action types by data. |
 
 `string`, `table` and `math` are the standard libraries, complete.
+
+### Forms
+
+`prompt({ title, description, fields })`. `title` heads the screen and `description` is a paragraph above the fields;
+both are optional. `fields` is a list of up to 12 fields, drawn in order.
+
+| Field | |
+|---|---|
+| `key` | Where the answer goes in the returned table. Defaults to `label`; one of the two is required, and two fields may not share a key. |
+| `label` | Written beside the control. Defaults to `key`. |
+| `description` | A line under the control. |
+| `type` | `"text"` (the default), `"number"`, `"toggle"` or `"choice"`. |
+| `default` | What the control starts with. A number for `number`, `true` or `false` for `toggle`, an option's key for `choice`. |
+| `required` | `text`: may not be left blank. `number`: must be given — `true` unless you say otherwise, and a blank optional number is simply absent from the answers. |
+| `min`, `max` | `number`: inclusive bounds. |
+| `integer` | `number`: refuse fractions. |
+| `options` | `choice`: what can be picked, in order. Each is a string, or `{ key, label }`. The answer is the key. Clicking the button steps to the next option. |
+
+| Type | Answer |
+|---|---|
+| `text` | A string, possibly empty. |
+| `number` | A number. A comma counts as a decimal point. |
+| `toggle` | `true` or `false`. |
+| `choice` | The chosen option's key. |
+
+A mistake in the table itself — an unknown type, a choice without options, a default the field cannot hold — is an
+error naming the field, raised before anything opens.
 
 ---
 

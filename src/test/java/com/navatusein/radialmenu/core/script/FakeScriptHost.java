@@ -78,6 +78,15 @@ class FakeScriptHost implements ScriptContext {
     final List<String> prompts = new ArrayList<>();
 
     /**
+     * Answers the forms, in order: what the player changed, by field key, as the controls hold it. A field left out
+     * keeps what it started with. A missing map is the player cancelling.
+     */
+    final Deque<Map<String, String>> filled = new ArrayDeque<>();
+
+    /** Every form the script put up. */
+    final List<ScriptForm> forms = new ArrayList<>();
+
+    /**
      * The real instruction budget and entry cap, but not the real wall clock. Twenty milliseconds is a stutter in a
      * warmed-up client; on a cold test JVM on a shared CI runner it is class loading, and a script that did nothing
      * wrong was stopped before it opened its menu. The watchdog itself is proven by its own test with its own limits.
@@ -139,6 +148,22 @@ class FakeScriptHost implements ScriptContext {
             case PROMPT:
                 prompts.add(request.text);
                 task.resumeText(typed.isEmpty() ? null : typed.poll());
+                break;
+            case FORM:
+                forms.add(request.form);
+                if (filled.isEmpty()) {
+                    task.resumeForm(null);
+                    break;
+                }
+                Map<String, String> answers = request.form.initialAnswers();
+                answers.putAll(filled.poll());
+                // The real screen will not close on an answer the form refuses, so neither does the fake: a test
+                // answering with one is a test of something the player cannot do.
+                if (!request.form.check(answers)
+                    .isEmpty()) {
+                    fail("the form would not accept " + answers + ": " + request.form.check(answers));
+                }
+                task.resumeForm(answers);
                 break;
             case ACTION:
                 actions.add(request.action);
