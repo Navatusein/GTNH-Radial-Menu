@@ -6,6 +6,8 @@ import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import net.minecraft.client.gui.GuiButton;
 import net.minecraft.client.gui.GuiTextField;
@@ -70,18 +72,42 @@ public class GuiIconPicker extends UiScreen {
         final String label;
         final String search;
 
+        /**
+         * The item's numeric id, or -1 for anything that is not an item.
+         *
+         * <p>
+         * Kept because it is the name half the tools in a pack still use: WorldEdit, NEI's id display and plenty of
+         * configs speak {@code 458:15}, and a player copying a block from one of those has only the number.
+         */
+        final int numericId;
+
         Entry(String id, int meta, String label) {
+            this(id, meta, label, -1);
+        }
+
+        Entry(String id, int meta, String label, int numericId) {
             this.id = id;
             this.meta = meta;
             this.label = label == null || label.isEmpty() ? id : label;
             this.search = (id + ' ' + this.label).toLowerCase();
+            this.numericId = numericId;
         }
     }
+
+    /**
+     * A search that is a numeric id, with or without its metadata: {@code 458}, {@code 458:15}, {@code 458#15}.
+     *
+     * <p>
+     * Matched exactly rather than as text: as a substring, {@code 45} would match every name with a 45 in it and every
+     * id from 145 to 4599, which is not a search anyone typing a number meant.
+     */
+    private static final Pattern NUMERIC_ID = Pattern.compile("(\\d+)(?:[:#](\\d+))?");
 
     private static final int ID_TAB_BASE = 10;
     private static final int ID_COLOR = 20;
     private static final int ID_REFRESH = 21;
     private static final int ID_ORIGINAL = 22;
+    private static final int ID_HAND = 23;
 
     private static final int CELL = 20;
 
@@ -165,7 +191,12 @@ public class GuiIconPicker extends UiScreen {
         // the gaps at three pixels on one side of the colour button and four on the other - the sort of difference
         // that is invisible to write and obvious to look at.
         int refreshLeft = contentRight() - Ui.ROW;
-        int colorLeft = refreshLeft - Ui.GAP - COLOR_WIDTH;
+        // Words, like the refresh button beside it. A sprite of a hand was tried and read as something from a
+        // different screen among buttons that all say what they do.
+        String handLabel = I18n.format("radialmenu.icons.hand");
+        int handWidth = this.fontRendererObj.getStringWidth(handLabel) + Ui.PAD * 2;
+        int handLeft = refreshLeft - Ui.GAP - handWidth;
+        int colorLeft = handLeft - Ui.GAP - COLOR_WIDTH;
         int searchWidth = colorLeft - Ui.GAP - left;
 
         searchField = new GuiTextField(this.fontRendererObj, left + 1, y + 3, searchWidth - 2, 14);
@@ -181,6 +212,14 @@ public class GuiIconPicker extends UiScreen {
         colorButton.enabled = tab == Tab.SPRITES || (tab == Tab.FILES && !originalColors);
         this.buttonList.add(colorButton);
         tooltip(ID_COLOR, I18n.format("radialmenu.icons.color.tip"));
+        GuiButton handButton = new GuiButton(ID_HAND, handLeft, y, handWidth, Ui.ROW, handLabel);
+        IconSpec held = heldItem();
+        handButton.enabled = held != null;
+        this.buttonList.add(handButton);
+        tooltip(
+            ID_HAND,
+            held == null ? I18n.format("radialmenu.icons.hand.empty")
+                : I18n.format("radialmenu.icons.hand.tip", heldName()));
         this.buttonList.add(new GuiButton(ID_REFRESH, refreshLeft, y, Ui.ROW, Ui.ROW, "R"));
         tooltip(ID_REFRESH, I18n.format("radialmenu.icons.refresh.tip"));
 
@@ -273,8 +312,9 @@ public class GuiIconPicker extends UiScreen {
             if (item == null) {
                 continue;
             }
+            int numericId = Item.getIdFromItem(item);
             for (int meta : metasOf(item)) {
-                itemEntries.add(new Entry(name, meta, displayName(item, meta)));
+                itemEntries.add(new Entry(name, meta, displayName(item, meta), numericId));
             }
         }
     }
@@ -363,6 +403,17 @@ public class GuiIconPicker extends UiScreen {
 
         switch (tab) {
             case ITEMS:
+                Matcher numeric = NUMERIC_ID.matcher(needle);
+                if (numeric.matches()) {
+                    int id = Integer.parseInt(numeric.group(1));
+                    int meta = numeric.group(2) == null ? -1 : Integer.parseInt(numeric.group(2));
+                    for (Entry entry : itemEntries) {
+                        if (entry.numericId == id && (meta < 0 || entry.meta == meta)) {
+                            visible.add(entry);
+                        }
+                    }
+                    break;
+                }
                 for (Entry entry : itemEntries) {
                     if (matches(entry, needle)) {
                         visible.add(entry);
@@ -452,7 +503,13 @@ public class GuiIconPicker extends UiScreen {
     private String hoverLabel(Entry entry) {
         switch (tab) {
             case ITEMS:
-                return entry.label + " (" + entry.id + (entry.meta != 0 ? "#" + entry.meta : "") + ")";
+                return entry.label + " ("
+                    + entry.id
+                    + (entry.meta != 0 ? "#" + entry.meta : "")
+                    + ", "
+                    + entry.numericId
+                    + (entry.meta != 0 ? ":" + entry.meta : "")
+                    + ")";
             case EFFECTS:
                 return entry.label;
             default:
@@ -521,6 +578,14 @@ public class GuiIconPicker extends UiScreen {
             requestRebuild();
             return;
         }
+        if (button.id == ID_HAND) {
+            IconSpec held = heldItem();
+            if (held != null) {
+                callback.onIconPicked(held);
+                GuiStack.pop();
+            }
+            return;
+        }
         if (button.id == ID_REFRESH) {
             // Picks up a PNG just dropped into the folder, without restarting the game.
             UserIconLoader.refresh();
@@ -540,6 +605,15 @@ public class GuiIconPicker extends UiScreen {
     @Override
     protected void drawContent(int mouseX, int mouseY, float partialTicks) {
         searchField.drawTextBox();
+        if (tab == Tab.ITEMS && searchField.getText()
+            .isEmpty()) {
+            // Said in the box, because a search that takes numeric ids is otherwise one nobody finds out about.
+            this.fontRendererObj.drawString(
+                I18n.format("radialmenu.icons.search.hint"),
+                searchField.xPosition + 4,
+                searchField.yPosition + (searchField.height - 8) / 2,
+                Ui.TEXT_MUTED);
+        }
         // The grid needs a ground of its own; against the bare panel the icons read as scattered rather than listed.
         Ui.list(gridLeft, gridTop, contentRight(), gridBottom());
 
@@ -582,6 +656,42 @@ public class GuiIconPicker extends UiScreen {
         }
     }
 
+    /**
+     * The item in the player's hand, as an icon, or null for an empty hand.
+     *
+     * <p>
+     * The damage value is kept only for an item that uses it to tell its kinds apart. On a tool it is wear, and an
+     * icon of a pickaxe two-thirds worn is no icon anyone was asking for.
+     */
+    private IconSpec heldItem() {
+        ItemStack stack = heldStack();
+        if (stack == null) {
+            return null;
+        }
+        Object name = Item.itemRegistry.getNameForObject(stack.getItem());
+        if (name == null) {
+            return null;
+        }
+        return IconSpec.item(String.valueOf(name), stack.getHasSubtypes() ? stack.getItemDamage() : 0);
+    }
+
+    private ItemStack heldStack() {
+        if (this.mc == null || this.mc.thePlayer == null) {
+            return null;
+        }
+        ItemStack stack = this.mc.thePlayer.getHeldItem();
+        return stack == null || stack.getItem() == null ? null : stack;
+    }
+
+    /** Guarded like every other display name here: it is the item's own code, and it can throw. */
+    private String heldName() {
+        try {
+            return heldStack().getDisplayName();
+        } catch (Throwable broken) {
+            return String.valueOf(Item.itemRegistry.getNameForObject(heldStack().getItem()));
+        }
+    }
+
     @Override
     protected void drawOverlay(int mouseX, int mouseY, float partialTicks) {
         for (Object raw : this.buttonList) {
@@ -610,7 +720,6 @@ public class GuiIconPicker extends UiScreen {
                 button.xPosition + 20,
                 button.yPosition + (Ui.ROW - 8) / 2,
                 button.enabled ? Ui.TEXT : Ui.TEXT_MUTED);
-            return;
         }
     }
 
