@@ -598,6 +598,19 @@ the old one would delete the file just written.
 Gson is 2.2.4 in 1.7.10, which **ignores `@SerializedName` on enum constants** — `LowercaseEnumAdapterFactory`
 handles enum casing instead.
 
+## Translations
+
+`assets/radialmenu/lang/` holds `en_US`, `zh_CN`, `ru_RU` and `uk_UA`. **A new key goes into every one of them in the
+same change** - a translation of your own rather than the English pasted across, and on the line matching its English
+neighbour, so the files stay line for line comparable. A missing key does not fail at run time: the game falls back to
+English, and a player reading Russian meets one English sentence on an otherwise Russian screen. `LangFilesTest` fails
+the build on a key missing from any language, on placeholders that differ from the English (`%s` dropped prints
+without its value; `%d` added throws inside `String.format` and shows "Format error"), and on a key set twice. It
+finds the languages by listing the folder, so a fifth one is checked as soon as it exists.
+
+Translations written here are a non-native speaker's. A PR that adds or changes Chinese says so, so whoever
+contributed `zh_CN` can check it.
+
 ## Status
 
 Working: template setup, mixin accessor, `core/` + unit tests, profiles with auto-bind, wheel rendering and
