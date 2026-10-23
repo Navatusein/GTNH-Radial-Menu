@@ -65,7 +65,16 @@ public final class ScriptRequest {
          * A screen, so it blocks exactly the way a menu does - and like a menu, the answer may be nothing at all,
          * because the player is always allowed to change their mind.
          */
-        PROMPT
+        PROMPT,
+
+        /**
+         * Ask several things at once - {@code prompt} handed a table - and hand back a table of answers.
+         *
+         * <p>
+         * Blocks and may come back empty exactly as {@link #PROMPT} does; the difference is only how many questions
+         * the screen carries.
+         */
+        FORM
     }
 
     public final Kind kind;
@@ -85,7 +94,16 @@ public final class ScriptRequest {
     /** {@link Kind#STORE_SET}: the key being written. {@link Kind#PROMPT}: what the box starts out holding. */
     public final String key;
 
+    /** {@link Kind#FORM}: the questions. */
+    public final ScriptForm form;
+
     private ScriptRequest(Kind kind, String text, int ticks, MenuNode menu, ActionSpec action, String key) {
+        this(kind, text, ticks, menu, action, key, null);
+    }
+
+    private ScriptRequest(Kind kind, String text, int ticks, MenuNode menu, ActionSpec action, String key,
+        ScriptForm form) {
+        this.form = form;
         this.kind = kind;
         this.text = text;
         this.ticks = ticks;
@@ -139,6 +157,10 @@ public final class ScriptRequest {
         return new ScriptRequest(Kind.PROMPT, title, 0, null, null, initial);
     }
 
+    public static ScriptRequest form(ScriptForm form) {
+        return new ScriptRequest(Kind.FORM, form.title, 0, null, null, null, form);
+    }
+
     @Override
     public String toString() {
         switch (kind) {
@@ -161,6 +183,8 @@ public final class ScriptRequest {
                 return kind + "(" + key + " = " + text + ")";
             case PROMPT:
                 return kind + "(" + text + ")";
+            case FORM:
+                return kind + "(" + text + ", " + form.fields.size() + " fields)";
             default:
                 return kind.toString();
         }
