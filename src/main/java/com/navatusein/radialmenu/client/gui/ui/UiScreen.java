@@ -17,6 +17,7 @@ import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
 import com.navatusein.radialmenu.client.gui.GuiStack;
+import com.navatusein.radialmenu.client.input.KeysHeldOnOpen;
 
 /**
  * Base for every screen in the mod.
@@ -42,6 +43,12 @@ public abstract class UiScreen extends GuiScreen {
     private static final int TITLE_BAND = 24;
 
     private boolean rebuildPending;
+
+    /**
+     * Keys already down when this screen was made. Taken at construction rather than in {@code initGui}, which runs
+     * again on every resize and on the way back from a pushed screen.
+     */
+    private final KeysHeldOnOpen keysHeldOnOpen = new KeysHeldOnOpen();
 
     /** How far the content is scrolled. Needed because a panel can be taller than a small screen. */
     protected int scrollOffset;
@@ -530,6 +537,18 @@ public abstract class UiScreen extends GuiScreen {
 
     /** Everything inside the panel. Buttons draw themselves afterwards. */
     protected abstract void drawContent(int mouseX, int mouseY, float partialTicks);
+
+    /**
+     * Ignores a key that was held before the screen existed: it was pressed for whatever opened the screen, and with
+     * repeat events on it would otherwise type itself into the first text field until it is let go.
+     */
+    @Override
+    public void handleKeyboardInput() {
+        if (keysHeldOnOpen.swallow()) {
+            return;
+        }
+        super.handleKeyboardInput();
+    }
 
     @Override
     protected void keyTyped(char typedChar, int keyCode) {
