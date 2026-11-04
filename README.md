@@ -1,99 +1,144 @@
 # RadialMenu
 
-**Hold a key. Point. Let go.** A client-side radial menu for Minecraft 1.7.10 that puts actions on a wheel instead of
-on keys you no longer have.
+**Hold a key, point, let go.** A client-side radial menu for Minecraft 1.7.10, built for packs with more keybindings
+than a keyboard has keys.
 
-![The wheel](/docs/assets/wheel.png)
+![Twelve keybindings with no key, on one ring](/docs/assets/hero.png)
 
-In a pack the size of GTNH there are not enough keys on a keyboard to go round, and the useful ones are long gone. So
-the mod does the one thing the controls screen cannot: it **presses a keybinding that has no key assigned at all**.
-Everything else — submenus, profiles, scripts, the editor — exists to serve that.
+A pack the size of GT New Horizons registers hundreds of keybindings, and the keyboard ran out long ago. RadialMenu
+puts them on a wheel instead — and does the one thing the controls screen cannot: **it presses a keybinding that has
+no key assigned at all.** The quest book, the magnet, the backpack, the waypoint you never found a key for: one ring,
+one key.
 
-No network channels, no server side. Everything it does is something you could have done by hand, so it works on
-unmodified servers and nobody else needs the mod.
+It is client-side only. No packets, no server part — everything it does is something you could have done by hand, so
+it works on any server and nobody else needs the mod.
 
----
-
-## Contents
-
-- [What a slot can do](#what-a-slot-can-do)
+- [Quick start](#quick-start)
+- [What an entry can do](#what-an-entry-can-do)
 - [Submenus](#submenus)
+- [Make it yours](#make-it-yours)
 - [Scripts](#scripts)
-- [Icons](#icons)
 - [Profiles](#profiles)
-- [Install](#install)
-- [Controls](#controls)
-- [Editing](#editing)
-- [The way it looks](#the-way-it-looks)
+- [The editor](#the-editor)
+- [Settings](#settings)
 - [Files and commands](#files-and-commands)
 - [Development](#development)
 
 ---
 
-## What a slot can do
+## Quick start
 
-| | Action | What it does | Details |
-|---|---|---|---|
-| ⌨ | **Keybind** | Presses a keybinding — **including one with no key assigned**. Tap, toggle, or hold for a set time. Can hold Shift, Ctrl, Alt or sneak with it. | [Parameters](docs/PROFILE_FORMAT.md#keybind--press-a-keybinding) |
-| 💬 | **Command** | Sends chat lines or slash commands, with `{player}` `{dim}` `{x}` `{y}` `{z}` placeholders. Give it several and it cycles through them. | [Parameters](docs/PROFILE_FORMAT.md#command--send-chat-lines-or-slash-commands) |
-| 🔀 | **Profile switch** | Switches to another profile, or cycles to the next one. | [Profiles](#profiles) · [parameters](docs/PROFILE_FORMAT.md#profileswitch--change-the-active-profile) |
-| ⭕ | **Submenu** | A nested wheel with its own slot count, layout and colours — in place of this one, or unfolded as a ring around it. | [Submenus](#submenus) · [parameters](docs/PROFILE_FORMAT.md#how-a-submenu-arrives) |
-| ⛓ | **Chain** | Runs several of the above in order, with an optional delay between the steps. | [Parameters](docs/PROFILE_FORMAT.md#sequence--a-chain-of-actions) |
-| 📜 | **Script** | Runs Lua: ask the server something, read the reply, and build a wheel out of what it said. | [Scripts](#scripts) · [guide](docs/SCRIPTING.md) |
+1. Put the jar in `mods/` next to [GTNHLib](https://github.com/GTNewHorizons/GTNHLib). Forge 1.7.10, client only.
+2. In game, hold <kbd>R</kbd>. A starter wheel opens.
+3. Hold <kbd>Shift</kbd> and click a sector to change it — an empty one makes a new entry.
 
-The point of the first one bears repeating: a mod that registers a keybinding but has no key left for it is normally
-unusable. Here it is a slot, and the mod writes the press into the binding itself — so AE2's terminal, Draconic
-Evolution's goggles and the backpack you never had a key for all work from the wheel.
+| Key | What it does |
+|---|---|
+| <kbd>R</kbd>, held | Open the wheel. Let go over an entry to run it. |
+| <kbd>Right click</kbd> | One step back: fold a ring, leave a submenu, or close. |
+| <kbd>Esc</kbd> | Close, wherever you are. |
+| <kbd>Shift</kbd> + click | Edit the entry under the cursor. In the middle: the menu's own settings. |
 
-![An entry under the cursor](/docs/assets/wheel-hover.png)
+The open key can be a mouse button. Switching profiles and opening the editor have keybindings of their own, unbound
+by default — this mod is not going to take keys from you.
 
-An entry can also be marked **Keep menu open**, which leaves the wheel up so you can fire it again, or pick the next
-thing without reopening.
+---
+
+## What an entry can do
+
+| | Action | What it does |
+|---|---|---|
+| ⌨ | **Keybind** | Presses any keybinding, **bound or not**. Tap, toggle, or hold for a while; with Shift, Ctrl, Alt or sneak held along. |
+| 💬 | **Command** | Sends chat or slash commands, with `{player}` `{x}` `{y}` `{z}` `{dim}` filled in. Several lines cycle. |
+| ⭕ | **Submenu** | A wheel inside the wheel, with its own size, layout and colours. |
+| ⛓ | **Chain** | Several actions in a row, with a delay between them if you want one. |
+| 🔀 | **Profile** | Switches to another profile, or to the next one. |
+| 📜 | **Script** | Lua that asks the server something and builds a wheel out of the answer. |
+
+![The cursor sweeping round the wheel](/docs/assets/clip-hover.gif)
+
+The press goes straight into the binding, the way the keyboard would have put it there, so mods that check for their
+key in any of the usual ways react to it — AE2's terminal, Draconic Evolution's toggles and both backpack mods
+included. Every parameter is listed in [docs/PROFILE_FORMAT.md](docs/PROFILE_FORMAT.md).
 
 ---
 
 ## Submenus
 
-A submenu arrives one of two ways, and it is one setting on the entry.
+A submenu either takes the wheel's place, or unfolds around it as a ring — one setting on the entry.
 
-**Replace** is the classic wheel: choosing the entry takes the screen over, and a right-click walks back out the way
-you came in.
+An **inline** ring opens by *pointing* at its entry, not by choosing it, so a whole branch is one movement away and the
+menu you came from never leaves the screen.
 
-**Inline** unfolds it as a ring around the entry instead — and it opens by **pointing at it** rather than by choosing
-it, so a whole branch is one movement away. The parent stays on screen, which means several rings are open at once and
-the entry you came from is still where you left it.
+![A ring unfolding as the cursor reaches its entry](/docs/assets/clip-inline.gif)
 
-![An inline submenu](/docs/assets/wheel-inline.png)
+| A ring around its entry | Rings inside rings |
+|---|---|
+| ![An inline submenu](/docs/assets/wheel-inline.png) | ![Two inline rings at once](/docs/assets/wheel-inline-deep.png) |
 
-![Two inline rings at once](/docs/assets/wheel-inline-deep.png)
+A **replacing** submenu takes the whole wheel, and the header says how you got there. Right click walks back out.
 
-Each ring is drawn with the same sector size as the entry it grew from, so an entry is the same size to aim at however
-deep it sits. One branch per menu stays open at a time, and a short hover delay keeps the wheel from unfolding
-everything the cursor passes over on its way.
+![A submenu that replaced the wheel](/docs/assets/wheel-replace.png)
+
+An entry in a ring is the same size to aim at as the one it grew from, a short hover delay stops the wheel unfolding
+everything the cursor crosses, and only one branch per menu is open at a time.
+
+---
+
+## Make it yours
+
+Every picture below is the same menu. Nothing about the look is fixed.
+
+| Gaps, no outline | Outlined, touching | Slot plates | Wide gaps, big icons |
+|---|---|---|---|
+| ![Default](/docs/assets/style-default.png) | ![Outlined](/docs/assets/style-outlined.png) | ![Slot plates](/docs/assets/style-plates.png) | ![Wide](/docs/assets/style-wide.png) |
+
+| Red | Green | Gold | Purple |
+|---|---|---|---|
+| ![Red accent](/docs/assets/style-red.png) | ![Green accent](/docs/assets/style-green.png) | ![Gold accent](/docs/assets/style-gold.png) | ![Purple accent](/docs/assets/style-purple.png) |
+
+**Pick one colour, get a palette.** Choose an accent and the editor fills in all six colours from it — ring, highlight,
+both outlines, the wash behind the screen. What it writes are plain colours, yours to adjust one by one afterwards.
+
+**Colours inherit: menu → profile → mod settings.** A submenu that sets nothing looks like its profile, and a profile
+that sets nothing looks like the mod's settings. So a single branch can stand out without repainting the rest:
+
+| Each menu its own colour | Darken the world behind the wheel |
+|---|---|
+| ![A blue wheel with a green ring](/docs/assets/style-per-menu.png) | ![The background dimmed](/docs/assets/style-dim.png) |
+
+**The shape is settings too:** both radii, the gap between sectors, line width, which outlines are drawn, a soft edge,
+icon size, and vanilla's own slot plates behind the icons.
+
+**And so is the way it arrives:**
+
+| Zoom | Fade | Staggered |
+|---|---|---|
+| ![Zoom](/docs/assets/reveal-zoom.gif) | ![Fade](/docs/assets/reveal-fade.gif) | ![Staggered](/docs/assets/reveal-stagger.gif) |
+
+Slowed down here to be seen; in game the wheel is there in under a fifth of a second. There is also none at all, and
+staggered the other way round. The sector under the cursor leaning out is a setting of its own.
 
 ---
 
 ## Scripts
 
-Some menus cannot be written down in advance: the list of your homes, the warps a server knows, what is in your
-inventory right now. A **script** is for those. It is Lua, it runs inside the client, and it can do only what you could
-have done by hand — send chat, read the replies, press a binding, and put a wheel up.
+Some menus cannot be written down in advance: your homes on a server, its warps, what you are carrying. A script is for
+those — Lua that runs inside the client and can do what you could have done by hand: send chat, read the reply, press
+a binding, and put up a wheel.
 
 ```lua
-local playerName = player.name
+chat.send("/home list")
 
-chat.send("/home list " .. playerName)
+local reply = chat.await("^Homes: (.+)$", 5)
 
-local list = chat.await("^" .. playerName .. ": %d+ / %d+: (.+)$", 60)
-
-if not list then
-  notify("no answer from /home list")
+if not reply then
   return
 end
 
 local homes = {}
 
-for name in list:gmatch("[^,%s]+") do
+for name in reply:gmatch("[^,%s]+") do
   homes[#homes + 1] = {
     key = name,
     label = name,
@@ -101,158 +146,109 @@ for name in list:gmatch("[^,%s]+") do
   }
 end
 
-local pick = menu.open(homes, { title = "Homes", slots = 8 })
+local pick = menu.open(homes, {
+  title = "Homes"
+})
 
 if pick then
-  chat.send("/home " .. pick .. " " .. playerName)
+  chat.send("/home " .. pick)
 end
 ```
 
-| The wheel that script builds | A script menu with a branch of its own |
+| The wheel it builds | A script's menu with a branch |
 |---|---|
-| ![A script's wheel](/docs/assets/wheel-script.png) | ![A script's inline submenu](/docs/assets/wheel-script-inline.png) |
+| ![A wheel built by a script](/docs/assets/wheel-script.png) | ![A script's inline submenu](/docs/assets/wheel-script-inline.png) |
 
-A wheel a script built says **SCRIPT** in the header: it cannot be edited, and it is gone the moment it is answered.
+A wheel a script built says **SCRIPT** in its header: it is answered once and gone, so there is nothing to edit.
 
-Scripts are written in the game, in an editor with syntax highlighting, line numbers and the whole API one click away.
-A script that fails says which line, and the editor marks it when you open it again.
+A script can also ask questions — a whole form at once, which will not close until every answer is valid:
+
+![A form a script asked for](/docs/assets/script-form.png)
+
+Scripts are written in the game, in an editor with highlighting, folding and the whole API a click away. A script that
+fails says on which line.
 
 ![The script editor](/docs/assets/script-editor.png)
 
-**The scripting guide is [docs/SCRIPTING.md](docs/SCRIPTING.md)** — what a script can ask for, what it can build, and a
-set of complete scripts to start from. Scripts live inside the profile, so a profile you hand to someone else brings
-them along; `enableScripts` in the config refuses to run them at all.
-
----
-
-## Icons
-
-Five kinds, searchable by the name you read in game rather than by registry id.
-
-| Every item and block, subtypes included | The bundled [Phosphor](https://phosphoricons.com/) set |
-|---|---|
-| ![Items](/docs/assets/icon-picker-items.png) | ![Sprites](/docs/assets/icon-picker-sprites.png) |
-
-Status effects, vanilla or modded:
-
-![Status effects](/docs/assets/icon-picker-effects.png)
-
-And two more: **your own PNGs**, dropped into `RadialMenu/icons`; and **a player's head**, read off the skin the game
-is already drawing them with and kept in a cache — so a slot named after someone still shows their face when they are
-offline, which is exactly when you want it.
-
-Sprites and PNGs can be tinted. How big an icon is drawn is a setting, and the plate behind it follows.
+**The scripting guide is [docs/SCRIPTING.md](docs/SCRIPTING.md)** — every call, with complete scripts to start from.
+Scripts travel inside the profile; `enableScripts` in the settings turns them off entirely.
 
 ---
 
 ## Profiles
 
-A profile is one wheel tree, one file, one set of colours — `Mining`, `Building`, `That one server`.
+A profile is a whole wheel in one file: `Mining`, `Building`, `That one server`.
 
 ![The profile manager](/docs/assets/profiles.png)
 
-Profiles switch by hand, from a slot, from a keybinding, or **on their own**: each profile carries its own auto-bind
-rules, so joining a server or loading a world picks the right wheel without being asked.
+Switch by hand, from an entry, from a keybinding — or **let it happen**: each profile carries rules for the servers
+and worlds it belongs to, and joining one picks the right wheel. *Use current world* fills a rule in exactly as it will
+later be compared.
 
 | Auto-bind rules | The last three versions, kept |
 |---|---|
-| ![Auto-bind rules](/docs/assets/auto-bind-rules.png) | ![Backups](/docs/assets/backups.png) |
+| ![Auto-bind rules](/docs/assets/auto-bind-rules.png) | ![Kept versions](/docs/assets/backups.png) |
 
-**Use current world** fills a rule in exactly as the client will later compare it, which is the reliable way to get a
-server address right. Every save keeps the previous three versions of the profile, because the loss worth guarding
-against is not a half-written file but an editor that did exactly what it was told.
-
----
-
-## Install
-
-Requirements:
-
-- Minecraft 1.7.10 with Forge
-- [GTNHLib](https://github.com/GTNewHorizons/GTNHLib)
-
-Put the jar in `mods/`. The mod is **client-side only** — it does not need to be on the server, and the server does not
-need to know about it.
+Every save keeps the three before it. A half-written file is the rare accident; the common one is an editor that did
+exactly what it was told.
 
 ---
 
-## Controls
+## The editor
 
-| Key | What it does |
-|---|---|
-| <kbd>R</kbd> (hold) | Open the wheel. Release over a sector to run it. |
-| <kbd>Right click</kbd> | Step back: fold an open branch, leave a submenu, or close the wheel. |
-| <kbd>Esc</kbd> | Close the wheel, wherever you are in it. |
-| <kbd>Shift</kbd> + <kbd>Left click</kbd> | Edit the slot under the cursor, empty or not. |
-| <kbd>Shift</kbd> + <kbd>Left click</kbd> in the middle | Settings of the menu you are looking at. |
-
-The open key can be a mouse button. Next profile, previous profile and the editor have keybindings of their own,
-unbound by default. If you would rather click than release, or turn the wheel with the scroll wheel instead of pointing
-at it, both are in the config.
-
----
-
-## Editing
-
-Hold <kbd>Shift</kbd> and the wheel says **EDIT**. Click a sector to edit it — an empty one makes a new entry — or
-click the hole in the middle for the menu's own settings.
+Hold <kbd>Shift</kbd> and the wheel says **EDIT**. Click an entry to change it, an empty sector to add one, or the
+middle for the menu itself.
 
 ![Edit mode](/docs/assets/wheel-edit.png)
 
-A slot is an appearance and an action, and the fields under the tabs are whatever that action needs, so there is
-nothing on the screen that does not apply to it.
+An entry is a look and an action, and the fields are whatever that action needs — nothing on the screen that does not
+apply.
 
-| A keybind slot | A submenu: its shape and its colours |
+| A keybinding | A submenu: shape and colours |
 |---|---|
-| ![The slot editor](/docs/assets/slot-editor.png) | ![A submenu's settings](/docs/assets/slot-editor-submenu.png) |
+| ![The entry editor](/docs/assets/slot-editor.png) | ![A submenu's settings](/docs/assets/slot-editor-submenu.png) |
 
-| A chain of steps | A script slot |
+| A chain | A script |
 |---|---|
-| ![A chain](/docs/assets/slot-editor-chain.png) | ![A script slot](/docs/assets/slot-editor-script.png) |
+| ![A chain of steps](/docs/assets/slot-editor-chain.png) | ![A script entry](/docs/assets/slot-editor-script.png) |
 
-The menu's own screen holds its layout, its colours and the order of its entries — reorder them, duplicate one, remove
-one, or move one into another menu entirely. Nothing is written until you press Save.
+A menu's own screen holds its layout, its colours and its entries — drag them into order, duplicate, delete, or move
+one into another menu. Nothing is written until you save.
 
-![Menu settings](/docs/assets/menu-settings.png)
+| Menu settings | A profile's colours |
+|---|---|
+| ![Menu settings](/docs/assets/menu-settings.png) | ![Profile colours](/docs/assets/profile-colors.png) |
 
-A menu is either **fixed** or **dynamic**. Fixed keeps every entry at the same angle whatever its neighbours do, which
-is what makes muscle memory work, and empty positions stay as gaps. Dynamic divides the ring by however many entries
-there are.
+A **fixed** menu keeps every entry at the same angle whatever its neighbours do — that is what muscle memory needs —
+and leaves gaps where entries were removed. A **dynamic** one shares the circle among whatever is there.
+
+**Icons** come in five kinds, searched by the name you see in game: every item and block with its subtypes, the
+bundled [Phosphor](https://phosphoricons.com/) set, status effects (modded ones too), your own PNGs from
+`RadialMenu/icons`, and players' heads — remembered, so a teammate's entry still shows their face when they are
+offline.
+
+| Items and blocks | Phosphor icons |
+|---|---|
+| ![Items](/docs/assets/icon-picker-items.png) | ![Sprites](/docs/assets/icon-picker-sprites.png) |
+
+![Status effects](/docs/assets/icon-picker-effects.png)
 
 ---
 
-## The way it looks
+## Settings
 
-Colours inherit down a chain: **menu → profile → mod config**. A submenu that sets nothing looks like its profile, and
-a profile that sets nothing looks like the mod's settings — so one menu of destructive actions can be red without
-repainting everything else.
+**Mods → RadialMenu → Config.** What lives here is how the wheel behaves for you; a profile handed to someone else
+carries its colours, never your controls.
 
-![Profile colours](/docs/assets/profile-colors.png)
-
-Rather than picking six colours by hand, pick one **accent** and the editor fills the rest in from it. What it writes
-are ordinary colours, yours to adjust one at a time afterwards.
-
-The shape is yours too:
-
-| Outline on, sectors touching | No outline at all |
-|---|---|
-| ![Outlined](/docs/assets/wheel.png) | ![No outline](/docs/assets/wheel-no-outline.png) |
-
-| A five pixel gap between sectors | Vanilla slot plates under the icons |
-|---|---|
-| ![A sector gap](/docs/assets/wheel-gap.png) | ![Slot plates](/docs/assets/wheel-plates.png) |
-
-Settings live in **Mods → RadialMenu → Config**, in five categories.
-
-![The config categories](/docs/assets/config.png)
+![The settings categories](/docs/assets/config.png)
 
 | Category | What it holds |
 |---|---|
-| **Behaviour** | Release or click to select, choosing by scrolling, how the editor opens, whether the game keeps taking input while the wheel is up, whether scripts may run |
-| **Wheel** | Radii, the gap between sectors, line thickness, which lines are drawn, the soft edge, the plate behind each icon, icon size |
-| **Colors** | Ring fill and outline, highlight fill and outline, the wash behind the screen, sprite tint |
-| **Accent** | How far each of those colours lands from an accent colour, and how opaque it is |
-| **Animation** | How the wheel arrives — none, fade, zoom, or one of three staggered orders — and how far the sector under the cursor leans out |
+| **Behaviour** | Release or click to choose, choosing with the scroll wheel, how the editor opens, input while the wheel is up, scripts on or off |
+| **Wheel** | Radii, gaps, outlines, the soft edge, slot plates, icon size, the dimmed background |
+| **Colors** | The colours every profile starts from |
+| **Accent** | How the six colours are worked out from one |
+| **Animation** | How the wheel arrives, and how the entry under the cursor reacts |
 
 ![The wheel settings](/docs/assets/config-wheel.png)
 
@@ -260,36 +256,33 @@ Settings live in **Mods → RadialMenu → Config**, in five categories.
 
 ## Files and commands
 
-Menus live in the game folder, not in `config/` — one file per profile, so one can be copied between installations or
-handed to someone else:
+Menus live in the game folder, one file per profile, ready to copy to another instance or hand to a friend:
 
 ```
 RadialMenu/
-├── profiles/
-│   └── Mining.json
-├── backups/
-├── icons/
-├── cache/
-└── settings.json
+├── profiles/      one .json per profile
+├── backups/       the last three versions of each
+├── icons/         your own PNGs
+├── cache/         players' heads
+└── settings.json  which profile is active
 ```
 
-A broken file never stops the client from starting: anything unreadable is repaired or skipped. The format is
-documented for hand-editing in [docs/PROFILE_FORMAT.md](docs/PROFILE_FORMAT.md) — every action type, its parameters,
-and which of them are required.
+A broken file never stops the game from starting — what cannot be read is repaired or skipped. The format is documented
+for hand-editing, or for asking an assistant to write one, in [docs/PROFILE_FORMAT.md](docs/PROFILE_FORMAT.md).
 
 ```
-/radialmenu edit             # the profile manager
-/radialmenu profiles         # list them, and say which is active
-/radialmenu profile <name>   # switch
-/radialmenu reload           # re-read the profiles from disk
+/radialmenu edit             the profile manager
+/radialmenu profiles         list them, and which is active
+/radialmenu profile <name>   switch
+/radialmenu reload           read the files again
 ```
 
 ---
 
 ## Development
 
-Built from the GTNewHorizons [ExampleMod](https://github.com/GTNewHorizons/ExampleMod1.7.10) build script. The build
-needs JDK 25.
+Built on the GT New Horizons [ExampleMod](https://github.com/GTNewHorizons/ExampleMod1.7.10) build script; it needs
+JDK 25.
 
 ```shell
 ./gradlew build          # compile, test, format check, jar
@@ -298,5 +291,4 @@ needs JDK 25.
 ./gradlew spotlessApply  # format; the build fails on violations
 ```
 
-The jar for the game is `build/libs/radialmenu-<version>.jar` — not the `-dev` one, which is built against development
-mappings.
+The jar for the game is `build/libs/radialmenu-<version>.jar`, not the `-dev` one.
