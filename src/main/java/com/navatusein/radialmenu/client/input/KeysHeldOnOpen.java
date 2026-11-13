@@ -13,6 +13,12 @@ import org.lwjgl.input.Keyboard;
  * the key event it came from, so the one after a swallowed key is swallowed with it.
  *
  * <p>
+ * Swallowing that event is not enough on its own under lwjgl3ify: the text has already been copied into a buffer of
+ * its own, and a text field writes the whole buffer the next time any printable key reaches it. Held for a second, the
+ * wheel key typed nothing while it was down and then a row of backticks in front of the next digit. So the swallowed
+ * character is taken out of that buffer too - see {@link TypedTextBuffer}.
+ *
+ * <p>
  * Only keys that produce events are affected. A key code held down by {@link KeyBuffer} for an injected press never
  * produces one, so it cannot block the player from typing while that press lasts.
  */
@@ -42,6 +48,9 @@ public final class KeysHeldOnOpen {
         if (key == Keyboard.KEY_NONE) {
             boolean text = swallowNextText;
             swallowNextText = false;
+            if (text) {
+                TypedTextBuffer.remove(Keyboard.getEventCharacter());
+            }
             return text;
         }
         swallowNextText = false;
