@@ -12,3 +12,14 @@ jobs:
   release-tags:
     uses: GTNewHorizons/GTNH-Actions-Workflows/.github/workflows/release-tags.yml@master
     secrets: inherit
+
+  # The shared workflow creates the release without a title, so GitHub names it after the bare tag.
+  release-title:
+    needs: release-tags
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Name the release
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --title "Radial Menu $TAG"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
